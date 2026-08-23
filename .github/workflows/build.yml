@@ -1,0 +1,111 @@
+name: build
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:   # lets you build from the Actions tab any time
+
+permissions:
+  contents: write      # needed to attach binaries to a release
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            name: linux-x86_64
+            artifact: ytgrab-linux-x86_64
+          - os: windows-latest
+            name: windows-x86_64
+            artifact: ytgrab-windows-x86_64.exe
+          - os: macos-latest
+            name: macos-arm64
+            artifact: ytgrab-macos-arm64.zip
+          - os: macos-13
+            name: macos-x86_64
+            artifact: ytgrab-macos-x86_64.zip
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # PySide6 needs these shared libraries to even start headless on Linux.
+      - name: Install Linux Qt runtime deps
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libgl1 libxkbcommon-x11-0 \
+            libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 \
+            libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 libxcb-cursor0
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+
+      - name: Build
+        run: pyinstaller --noconfirm --clean ytgrab.spec
+
+      # Prove the binary actually runs and found a working ffmpeg, rather than
+      # just shipping whatever PyInstaller produced.
+      - name: Smoke test (Linux/macOS)
+        if: runner.os != 'Windows'
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: ./dist/ytgrab --selftest
+
+      - name: Smoke test (Windows)
+        if: runner.os == 'Windows'
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: .\dist\ytgrab.exe --selftest
+
+      - name: Package (Linux)
+        if: matrix.name == 'linux-x86_64'
+        run: mv dist/ytgrab "${{ matrix.artifact }}"
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        run: mv dist/ytgrab.exe "${{ matrix.artifact }}"
+
+      - name: Package (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          if [ -d dist/ytgrab.app ]; then
+            ditto -c -k --keepParent dist/ytgrab.app "${{ matrix.artifact }}"
+          else
+            ditto -c -k dist/ytgrab "${{ matrix.artifact }}"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}
+          if-no-files-found: error
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
+          generate_release_notes: true
+          body: |
+            Desktop builds of ytgrab.
+
+            macOS and Windows are unsigned, so the OS will warn on first launch:
+            on macOS right-click the app and choose Open; on Windows choose
+            "More info" then "Run anyway".

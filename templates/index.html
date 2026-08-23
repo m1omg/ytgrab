@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ytgrab</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #171a21;
+    --panel-2: #1e222b;
+    --line: #2a2f3a;
+    --text: #e8eaf0;
+    --muted: #9aa3b2;
+    --accent: #ff4b4b;
+    --accent-dim: #3a1d20;
+    --ok: #3ddc84;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 40px 20px;
+    background: var(--bg); color: var(--text);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    display: flex; justify-content: center;
+  }
+  .wrap { width: 100%; max-width: 680px; }
+  h1 { margin: 0 0 4px; font-size: 26px; letter-spacing: -0.5px; }
+  h1 span { color: var(--accent); }
+  .sub { color: var(--muted); font-size: 14px; margin-bottom: 28px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 14px; padding: 20px; margin-bottom: 16px;
+  }
+  .row { display: flex; gap: 10px; }
+  input[type=url] {
+    flex: 1; padding: 12px 14px; border-radius: 10px;
+    border: 1px solid var(--line); background: var(--panel-2);
+    color: var(--text); font-size: 15px; outline: none;
+  }
+  input[type=url]:focus { border-color: var(--accent); }
+  button {
+    padding: 12px 18px; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--panel-2); color: var(--text);
+    font-size: 15px; font-weight: 500; cursor: pointer;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: 0.5; cursor: default; }
+  button.primary {
+    background: var(--accent); border-color: var(--accent);
+    color: #fff; width: 100%; margin-top: 18px; padding: 14px;
+  }
+  button.primary:hover:not(:disabled) { background: #ff6060; }
+  .hidden { display: none !important; }
+
+  .meta { display: flex; gap: 14px; align-items: flex-start; }
+  .meta img { width: 140px; border-radius: 8px; flex-shrink: 0; }
+  .meta .t { font-weight: 600; margin-bottom: 4px; }
+  .meta .m { color: var(--muted); font-size: 13px; }
+
+  .modes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .mode {
+    border: 1px solid var(--line); border-radius: 10px; padding: 12px;
+    text-align: center; cursor: pointer; background: var(--panel-2);
+  }
+  .mode.active { border-color: var(--accent); background: var(--accent-dim); }
+  .mode b { display: block; font-size: 14px; }
+  .mode small { color: var(--muted); font-size: 11.5px; }
+
+  label.field { display: block; margin-top: 16px; font-size: 13px; color: var(--muted); }
+  select {
+    width: 100%; margin-top: 6px; padding: 10px 12px; border-radius: 10px;
+    border: 1px solid var(--line); background: var(--panel-2);
+    color: var(--text); font-size: 14px;
+  }
+  .check { display: flex; align-items: center; gap: 8px; margin-top: 16px; font-size: 14px; }
+  .check input { width: 16px; height: 16px; accent-color: var(--accent); }
+
+  .bar { height: 8px; background: var(--panel-2); border-radius: 99px; overflow: hidden; }
+  .bar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .25s; }
+  .bar.indet > i { width: 40%; animation: slide 1.1s ease-in-out infinite; }
+  @keyframes slide { 0% { margin-left: -40%; } 100% { margin-left: 100%; } }
+  .status { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); margin-bottom: 8px; }
+  .err { color: var(--accent); font-size: 14px; white-space: pre-wrap; }
+  .done { color: var(--ok); font-weight: 600; }
+  a.dl {
+    display: block; text-align: center; margin-top: 14px; padding: 14px;
+    background: var(--ok); color: #06210f; border-radius: 10px;
+    font-weight: 600; text-decoration: none;
+  }
+  .foot { color: var(--muted); font-size: 12px; text-align: center; margin-top: 24px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>yt<span>grab</span></h1>
+  <div class="sub">Download a video, or pull the audio stream straight out untouched.</div>
+
+  <div class="card">
+    <div class="row">
+      <input id="url" type="url" placeholder="https://www.youtube.com/watch?v=..." autofocus>
+      <button id="fetch">Fetch</button>
+    </div>
+    <div id="infoErr" class="err hidden" style="margin-top:12px"></div>
+  </div>
+
+  <div id="info" class="card meta hidden">
+    <img id="thumb" alt="">
+    <div>
+      <div class="t" id="title"></div>
+      <div class="m" id="submeta"></div>
+    </div>
+  </div>
+
+  <div id="opts" class="card hidden">
+    <div class="modes">
+      <div class="mode active" data-mode="video"><b>Video</b><small>with audio</small></div>
+      <div class="mode" data-mode="audio"><b>Audio</b><small>original stream</small></div>
+      <div class="mode" data-mode="mp3"><b>MP3</b><small>converted</small></div>
+    </div>
+
+    <div id="videoOpts">
+      <label class="field">Resolution
+        <select id="res"><option value="best">Best available</option></select>
+      </label>
+      <label class="field">Container
+        <select id="container">
+          <option value="mp4">MP4 — most compatible</option>
+          <option value="mkv">MKV — keeps the highest-quality streams as-is</option>
+        </select>
+      </label>
+    </div>
+
+    <div id="audioOpts" class="hidden">
+      <label class="field">Stream
+        <select id="acodec">
+          <option value="best">Best available (no re-encoding)</option>
+          <option value="opus">Prefer Opus (.opus)</option>
+          <option value="m4a">Prefer AAC (.m4a)</option>
+        </select>
+      </label>
+    </div>
+
+    <div id="mp3Opts" class="hidden">
+      <label class="field">Bitrate
+        <select id="bitrate">
+          <option value="0">VBR V0 — best quality (~245 kbps)</option>
+          <option value="320">320 kbps CBR</option>
+          <option value="256">256 kbps CBR</option>
+          <option value="192" selected>192 kbps CBR</option>
+          <option value="128">128 kbps CBR</option>
+        </select>
+      </label>
+    </div>
+
+    <label class="check" id="thumbRow">
+      <input type="checkbox" id="embed" checked> Embed cover art and metadata
+    </label>
+
+    <button class="primary" id="go">Download</button>
+  </div>
+
+  <div id="prog" class="card hidden">
+    <div class="status"><span id="stateTxt">Starting…</span><span id="statNums"></span></div>
+    <div class="bar" id="bar"><i id="fill"></i></div>
+    <div id="progErr" class="err hidden" style="margin-top:12px"></div>
+    <a id="dl" class="dl hidden">Save file</a>
+  </div>
+
+  <div class="foot">Runs locally via yt-dlp + ffmpeg. For content you have the right to download.</div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let mode = "video";
+let poll = null;
+
+function fmtSize(b) {
+  if (!b) return "";
+  const u = ["B", "KB", "MB", "GB"];
+  let i = 0;
+  while (b >= 1024 && i < u.length - 1) { b /= 1024; i++; }
+  return b.toFixed(i ? 1 : 0) + " " + u[i];
+}
+function fmtDur(s) {
+  if (!s) return "";
+  const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = Math.floor(s % 60);
+  return (h ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(x).padStart(2, "0");
+}
+
+document.querySelectorAll(".mode").forEach(el => {
+  el.onclick = () => {
+    document.querySelectorAll(".mode").forEach(m => m.classList.remove("active"));
+    el.classList.add("active");
+    mode = el.dataset.mode;
+    $("videoOpts").classList.toggle("hidden", mode !== "video");
+    $("audioOpts").classList.toggle("hidden", mode !== "audio");
+    $("mp3Opts").classList.toggle("hidden", mode !== "mp3");
+    $("thumbRow").classList.toggle("hidden", mode === "video");
+  };
+});
+
+async function fetchInfo() {
+  const url = $("url").value.trim();
+  if (!url) return;
+  $("fetch").disabled = true;
+  $("fetch").textContent = "…";
+  $("infoErr").classList.add("hidden");
+  try {
+    const r = await fetch("/api/info", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url })
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || "Could not read that link.");
+
+    $("thumb").src = d.thumbnail || "";
+    $("thumb").classList.toggle("hidden", !d.thumbnail);
+    $("title").textContent = d.title || "";
+    $("submeta").textContent = [d.uploader, fmtDur(d.duration), d.is_live ? "LIVE" : ""]
+      .filter(Boolean).join(" · ");
+    $("info").classList.remove("hidden");
+
+    const res = $("res");
+    res.innerHTML = '<option value="best">Best available</option>';
+    (d.heights || []).forEach(h => {
+      const o = document.createElement("option");
+      o.value = h;
+      o.textContent = h + "p";
+      res.appendChild(o);
+    });
+    $("opts").classList.remove("hidden");
+  } catch (e) {
+    $("infoErr").textContent = e.message;
+    $("infoErr").classList.remove("hidden");
+  } finally {
+    $("fetch").disabled = false;
+    $("fetch").textContent = "Fetch";
+  }
+}
+
+$("fetch").onclick = fetchInfo;
+$("url").addEventListener("keydown", e => { if (e.key === "Enter") fetchInfo(); });
+
+$("go").onclick = async () => {
+  const quality = mode === "video" ? $("res").value
+                : mode === "audio" ? $("acodec").value
+                : $("bitrate").value;
+  const body = {
+    url: $("url").value.trim(),
+    mode,
+    quality,
+    container: $("container").value,
+    embed_thumbnail: $("embed").checked
+  };
+  $("go").disabled = true;
+  $("prog").classList.remove("hidden");
+  $("progErr").classList.add("hidden");
+  $("dl").classList.add("hidden");
+  $("fill").style.width = "0";
+  $("stateTxt").textContent = "Starting…";
+  $("statNums").textContent = "";
+
+  const r = await fetch("/api/download", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
+  const d = await r.json();
+  if (!r.ok) {
+    $("progErr").textContent = d.error;
+    $("progErr").classList.remove("hidden");
+    $("go").disabled = false;
+    return;
+  }
+  clearInterval(poll);
+  poll = setInterval(() => checkStatus(d.job_id), 600);
+  checkStatus(d.job_id);
+};
+
+async function checkStatus(id) {
+  const r = await fetch("/api/status/" + id);
+  if (!r.ok) return;
+  const j = await r.json();
+
+  if (j.state === "downloading") {
+    $("bar").classList.remove("indet");
+    $("fill").style.width = (j.percent || 0) + "%";
+    $("stateTxt").textContent = "Downloading… " + (j.percent || 0).toFixed(1) + "%";
+    const parts = [];
+    if (j.total) parts.push(fmtSize(j.downloaded) + " / " + fmtSize(j.total));
+    if (j.speed) parts.push(fmtSize(j.speed) + "/s");
+    if (j.eta) parts.push(fmtDur(j.eta) + " left");
+    $("statNums").textContent = parts.join("  ·  ");
+  } else if (j.state === "processing" || j.state === "starting" || j.state === "queued") {
+    $("bar").classList.add("indet");
+    $("stateTxt").textContent = j.state === "processing"
+      ? (j.stage ? j.stage.charAt(0).toUpperCase() + j.stage.slice(1) + "…" : "Processing…")
+      : "Starting…";
+    $("statNums").textContent = "";
+  } else if (j.state === "done") {
+    clearInterval(poll);
+    $("bar").classList.remove("indet");
+    $("fill").style.width = "100%";
+    $("stateTxt").innerHTML = '<span class="done">Ready</span>';
+    $("statNums").textContent = fmtSize(j.filesize);
+    const a = $("dl");
+    a.href = "/api/file/" + id;
+    a.textContent = "Save " + j.filename;
+    a.classList.remove("hidden");
+    $("go").disabled = false;
+  } else if (j.state === "error") {
+    clearInterval(poll);
+    $("bar").classList.remove("indet");
+    $("stateTxt").textContent = "Failed";
+    $("progErr").textContent = j.error;
+    $("progErr").classList.remove("hidden");
+    $("go").disabled = false;
+  }
+}
+</script>
+</body>
+</html>

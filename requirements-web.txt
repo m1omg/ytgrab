@@ -1,0 +1,3 @@
+# Only needed for the optional browser version (app.py)
+-r requirements.txt
+flask>=3.0
