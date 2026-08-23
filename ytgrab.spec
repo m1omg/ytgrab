@@ -5,6 +5,7 @@ Builds a single-file executable for whichever OS it runs on. Bundles a static
 ffmpeg so the app works on machines that don't have one installed.
 """
 
+import os
 import sys
 from PyInstaller.utils.hooks import collect_submodules
 
@@ -69,7 +70,7 @@ exe = EXE(
     console=False,          # no terminal window behind the GUI
     disable_windowed_traceback=False,
     argv_emulation=False,   # macOS: don't intercept file-open events
-    target_arch=None,
+    target_arch=os.environ.get('YTGRAB_TARGET_ARCH') or None,
     codesign_identity=None,
     entitlements_file=None,
 )
