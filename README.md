@@ -61,6 +61,20 @@ full list.
 `python main.py --selftest` prints the versions it resolved and verifies that
 ffmpeg is present and runnable — useful if a build misbehaves.
 
+## Linux: menu entry
+
+`packaging/install-linux.sh` copies the built binary to `~/.local/bin`, renders
+the icon at the sizes an icon theme expects, and writes a `.desktop` file so
+ytgrab shows up in the applications menu. Everything stays under `~/.local`, so
+no root access is needed.
+
+```bash
+pyinstaller --noconfirm --clean ytgrab.spec   # if you haven't built yet
+./packaging/install-linux.sh
+```
+
+The installed binary is a snapshot, so re-run the script after rebuilding.
+
 ## Building
 
 ```bash
