@@ -30,6 +30,7 @@ jobs:
             python-arch: arm64
             # Qt 6.10+ needs macOS 15; 6.9.3 still supports macOS 12.
             pyside: PySide6-Essentials==6.9.3
+            ffmpeg-tag: macosx_11_0_arm64
           # Intel build runs on an Apple Silicon runner via Rosetta, because
           # the macos-13 Intel runners are being retired. Rosetta translates
           # x86_64 -> arm64, so an arm64 host can run the x64 toolchain.
@@ -39,6 +40,7 @@ jobs:
             python-arch: x64
             target-arch: x86_64
             pyside: PySide6-Essentials==6.9.3
+            ffmpeg-tag: macosx_10_9_x86_64
             optional: true      # never block a release on this leg
 
     steps:
@@ -73,6 +75,20 @@ jobs:
       - name: Pin Qt for macOS compatibility
         if: runner.os == 'macOS' && matrix.pyside != ''
         run: pip install "${{ matrix.pyside }}"
+
+      # pip resolves wheels for the host, so the Intel build would otherwise
+      # bundle an arm64 ffmpeg that cannot run on a real Intel Mac.
+      - name: Fetch ffmpeg for the target architecture (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          FF=$(python packaging/fetch_ffmpeg.py "${{ matrix.ffmpeg-tag }}" ffbin)
+          echo "YTGRAB_FFMPEG=$FF" >> "$GITHUB_ENV"
+          echo "bundling: $FF"
+          lipo -archs "$FF"
+          case "${{ matrix.name }}" in
+            *x86_64) lipo -archs "$FF" | grep -q x86_64 || { echo "ffmpeg is not x86_64"; exit 1; } ;;
+            *arm64)  lipo -archs "$FF" | grep -q arm64  || { echo "ffmpeg is not arm64";  exit 1; } ;;
+          esac
 
       - name: Build
         env:
@@ -109,6 +125,14 @@ jobs:
           BIN=dist/ytgrab.app/Contents/MacOS/ytgrab
           [ -f "$BIN" ] || { echo "no .app bundle was produced"; exit 1; }
           "$BIN" --selftest
+
+      # The runners ship a system ffmpeg, which masked a broken bundled one.
+      # Strip PATH so this can only pass using the ffmpeg inside the app.
+      - name: Smoke test with no system ffmpeg (macOS)
+        if: runner.os == 'macOS'
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: env PATH=/nonexistent dist/ytgrab.app/Contents/MacOS/ytgrab --selftest
 
       - name: Report the minimum macOS the bundle requires
         if: runner.os == 'macOS'

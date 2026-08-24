@@ -24,10 +24,13 @@ try:
     import imageio_ffmpeg
 
     _wanted = "ffmpeg.exe" if sys.platform == "win32" else "ffmpeg"
+    # YTGRAB_FFMPEG lets a cross-targeted build supply the right binary, since
+    # imageio_ffmpeg would otherwise hand back the one matching the host.
+    _source = os.environ.get("YTGRAB_FFMPEG") or imageio_ffmpeg.get_ffmpeg_exe()
     _stage = os.path.join(os.path.abspath("build"), "ffmpeg-stage")
     os.makedirs(_stage, exist_ok=True)
     _staged = os.path.join(_stage, _wanted)
-    _shutil.copy2(imageio_ffmpeg.get_ffmpeg_exe(), _staged)
+    _shutil.copy2(_source, _staged)
     os.chmod(_staged, 0o755)
     binaries.append((_staged, "."))
     print("bundling ffmpeg from %s" % _staged)
@@ -85,6 +88,6 @@ if sys.platform == "darwin":
         info_plist={
             "NSHighResolutionCapable": True,
             "LSMinimumSystemVersion": "12.0",
-            "CFBundleShortVersionString": "1.0.1",
+            "CFBundleShortVersionString": "1.0.2",
         },
     )
