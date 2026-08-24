@@ -97,8 +97,8 @@ jobs:
 
       # Prove the binary actually runs and found a working ffmpeg, rather than
       # just shipping whatever PyInstaller produced.
-      - name: Smoke test (Linux/macOS)
-        if: runner.os != 'Windows'
+      - name: Smoke test (Linux)
+        if: runner.os == 'Linux'
         env:
           QT_QPA_PLATFORM: offscreen
         run: ./dist/ytgrab --selftest
@@ -116,6 +116,13 @@ jobs:
       - name: Package (Windows)
         if: runner.os == 'Windows'
         run: mv dist/ytgrab.exe "${{ matrix.artifact }}"
+
+      - name: Ad-hoc sign the app (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          codesign --force --deep --sign - dist/ytgrab.app \
+            && codesign --verify --verbose=1 dist/ytgrab.app \
+            || echo "ad-hoc signing failed; the app still runs, just slower to start"
 
       - name: Smoke test the .app bundle (macOS)
         if: runner.os == 'macOS'
@@ -143,18 +150,24 @@ jobs:
           echo -n "  Info.plist claims: "
           /usr/libexec/PlistBuddy -c "Print :LSMinimumSystemVersion" "$PLIST"
 
-      - name: Verify architecture (macOS)
+      - name: Verify every bundled binary matches the target (macOS)
         if: runner.os == 'macOS'
         run: |
-          BIN=dist/ytgrab.app/Contents/MacOS/ytgrab
-          [ -f "$BIN" ] || BIN=dist/ytgrab
-          file "$BIN"
-          lipo -archs "$BIN"
-          EXPECT="${{ matrix.name }}"
-          case "$EXPECT" in
-            *arm64)   grep -q arm64  <<<"$(lipo -archs "$BIN")" || { echo "expected arm64"; exit 1; } ;;
-            *x86_64)  grep -q x86_64 <<<"$(lipo -archs "$BIN")" || { echo "expected x86_64"; exit 1; } ;;
+          case "${{ matrix.name }}" in
+            *arm64)  WANT=arm64 ;;
+            *x86_64) WANT=x86_64 ;;
           esac
+          BAD=0; N=0
+          while IFS= read -r f; do
+            ARCHS=$(lipo -archs "$f" 2>/dev/null) || continue
+            N=$((N+1))
+            case "$ARCHS" in
+              *"$WANT"*) ;;
+              *) echo "  wrong arch ($ARCHS): $f"; BAD=$((BAD+1)) ;;
+            esac
+          done < <(find dist/ytgrab.app -type f)
+          echo "  checked $N Mach-O files against $WANT, $BAD mismatched"
+          [ "$BAD" -eq 0 ]
 
       - name: Package (macOS)
         if: runner.os == 'macOS'
