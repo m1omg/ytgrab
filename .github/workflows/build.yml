@@ -28,6 +28,8 @@ jobs:
             name: macos-arm64
             artifact: ytgrab-macos-arm64.zip
             python-arch: arm64
+            # Qt 6.10+ needs macOS 15; 6.9.3 still supports macOS 12.
+            pyside: PySide6-Essentials==6.9.3
           # Intel build runs on an Apple Silicon runner via Rosetta, because
           # the macos-13 Intel runners are being retired. Rosetta translates
           # x86_64 -> arm64, so an arm64 host can run the x64 toolchain.
@@ -36,6 +38,7 @@ jobs:
             artifact: ytgrab-macos-x86_64.zip
             python-arch: x64
             target-arch: x86_64
+            pyside: PySide6-Essentials==6.9.3
             optional: true      # never block a release on this leg
 
     steps:
@@ -65,6 +68,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt pyinstaller
 
+      # Older Macs cannot run the newest Qt: 6.10+ is built against the
+      # macOS 15 SDK, so the app would die on launch on anything older.
+      - name: Pin Qt for macOS compatibility
+        if: runner.os == 'macOS' && matrix.pyside != ''
+        run: pip install "${{ matrix.pyside }}"
+
       - name: Build
         env:
           YTGRAB_TARGET_ARCH: ${{ matrix.target-arch || '' }}
@@ -91,6 +100,24 @@ jobs:
       - name: Package (Windows)
         if: runner.os == 'Windows'
         run: mv dist/ytgrab.exe "${{ matrix.artifact }}"
+
+      - name: Smoke test the .app bundle (macOS)
+        if: runner.os == 'macOS'
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          BIN=dist/ytgrab.app/Contents/MacOS/ytgrab
+          [ -f "$BIN" ] || { echo "no .app bundle was produced"; exit 1; }
+          "$BIN" --selftest
+
+      - name: Report the minimum macOS the bundle requires
+        if: runner.os == 'macOS'
+        run: |
+          BIN=dist/ytgrab.app/Contents/MacOS/ytgrab
+          otool -l "$BIN" | awk '/LC_BUILD_VERSION/{f=1} f&&/minos/{print "  binary minos:",$2; f=0}'
+          PLIST=dist/ytgrab.app/Contents/Info.plist
+          echo -n "  Info.plist claims: "
+          /usr/libexec/PlistBuddy -c "Print :LSMinimumSystemVersion" "$PLIST"
 
       - name: Verify architecture (macOS)
         if: runner.os == 'macOS'

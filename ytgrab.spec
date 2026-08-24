@@ -84,7 +84,7 @@ if sys.platform == "darwin":
         bundle_identifier="dev.ytgrab.app",
         info_plist={
             "NSHighResolutionCapable": True,
-            "LSMinimumSystemVersion": "11.0",
-            "CFBundleShortVersionString": "1.0.0",
+            "LSMinimumSystemVersion": "12.0",
+            "CFBundleShortVersionString": "1.0.1",
         },
     )
