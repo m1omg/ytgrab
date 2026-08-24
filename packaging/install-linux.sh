@@ -48,12 +48,15 @@ Type=Application
 Version=1.0
 Name=ytgrab
 GenericName=Video Downloader
+GenericName[sk]=Sťahovanie videí
 Comment=Download video and audio, or convert audio to MP3
+Comment[sk]=Stiahnutie videa a zvuku alebo prevod zvuku do MP3
 Exec=$BIN_DIR/ytgrab
 Icon=ytgrab
 Terminal=false
 Categories=AudioVideo;Recorder;
 Keywords=youtube;download;video;audio;music;mp3;
+Keywords[sk]=youtube;stiahnut;stahovanie;video;zvuk;hudba;mp3;
 StartupNotify=true
 StartupWMClass=ytgrab
 DESKTOP

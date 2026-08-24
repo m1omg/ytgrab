@@ -4,8 +4,11 @@ import sys
 import urllib.request
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QThread, Signal, QUrl, QPoint
-from PySide6.QtGui import QPixmap, QDesktopServices, QIcon, QPainter, QColor, QPolygon
+from PySide6.QtCore import Qt, QThread, Signal, QUrl, QPoint, QLocale, QSettings
+from PySide6.QtGui import (
+    QPixmap, QDesktopServices, QIcon, QPainter, QColor, QPolygon,
+    QAction, QActionGroup,
+)
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QLabel, QLineEdit, QPushButton, QComboBox, QCheckBox, QProgressBar,
@@ -13,19 +16,18 @@ from PySide6.QtWidgets import (
     QGroupBox, QMessageBox,
 )
 
-from . import core, __version__
+from . import core, i18n, __version__
+from .i18n import t
 
 
 # yt-dlp reports postprocessor names with the "FFmpeg" prefix stripped.
-STAGE_LABELS = {
-    "ExtractAudio": "Extracting audio",
-    "Merger": "Merging video and audio",
-    "VideoRemuxer": "Remuxing",
-    "VideoConvertor": "Converting",
-    "EmbedThumbnail": "Embedding cover art",
-    "Metadata": "Writing metadata",
-    "MoveFiles": "Finishing up",
-}
+KNOWN_STAGES = ("ExtractAudio", "Merger", "VideoRemuxer", "VideoConvertor",
+                "EmbedThumbnail", "Metadata", "MoveFiles")
+
+
+def stage_key(name):
+    """Translation key for a postprocessor, so the label follows the language."""
+    return f"stage_{name}" if name in KNOWN_STAGES else "stage_processing"
 
 
 class Cancelled(Exception):
@@ -98,13 +100,15 @@ class DownloadWorker(QThread):
                 "eta": d.get("eta") or 0,
             })
         elif d.get("status") == "finished":
-            self.stage.emit("Processing")
+            self.stage.emit("stage_processing")
 
     def _on_postprocess(self, d):
         if self._cancel:
             raise Cancelled()
         if d.get("status") == "started":
-            self.stage.emit(STAGE_LABELS.get(d.get("postprocessor") or "", "Processing"))
+            # The key travels, not the text, so a language switch mid-download
+            # relabels the stage that is already showing.
+            self.stage.emit(stage_key(d.get("postprocessor") or ""))
 
     def run(self):
         try:
@@ -138,6 +142,12 @@ class MainWindow(QMainWindow):
         self.thumb_worker = None
         self.dl_worker = None
         self.last_file = None
+        self.info = None          # last metadata read, for relabelling
+        self.fetching = False
+        # The two progress labels re-render themselves on a language switch,
+        # so each one keeps the callable that produced its current text.
+        self._state_text = None
+        self._stats_text = None
 
         root = QWidget()
         self.setCentralWidget(root)
@@ -145,6 +155,7 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(18, 18, 18, 18)
         layout.setSpacing(14)
 
+        self._build_menu()
         layout.addWidget(self._build_url_row())
         layout.addWidget(self._build_info_panel())
         layout.addWidget(self._build_mode_box())
@@ -154,32 +165,45 @@ class MainWindow(QMainWindow):
         layout.addWidget(self._build_progress())
         layout.addStretch(1)
 
-        self.statusBar().showMessage(self._ffmpeg_status())
+        self.retranslate()
         self._sync_mode()
 
     # -- construction ------------------------------------------------------
+
+    def _build_menu(self):
+        self.lang_menu = self.menuBar().addMenu("")
+        group = QActionGroup(self)
+        group.setExclusive(True)
+        self.lang_actions = {}
+        for code in i18n.languages():
+            action = QAction(i18n.language_name(code), self)
+            action.setCheckable(True)
+            action.setChecked(code == i18n.language())
+            action.triggered.connect(lambda _checked=False, c=code: self.set_language(c))
+            group.addAction(action)
+            self.lang_menu.addAction(action)
+            self.lang_actions[code] = action
 
     def _build_url_row(self):
         box = QWidget()
         row = QHBoxLayout(box)
         row.setContentsMargins(0, 0, 0, 0)
 
+        self.link_label = QLabel()
         self.url_edit = QLineEdit()
-        self.url_edit.setPlaceholderText("https://www.youtube.com/watch?v=...")
         self.url_edit.setClearButtonEnabled(True)
         self.url_edit.returnPressed.connect(self.fetch_info)
         self.url_edit.textChanged.connect(self._on_url_changed)
 
-        self.fetch_btn = QPushButton("Fetch")
+        self.fetch_btn = QPushButton()
         self.fetch_btn.clicked.connect(self.fetch_info)
 
-        paste_btn = QPushButton("Paste")
-        paste_btn.setToolTip("Paste a link from the clipboard and read its details")
-        paste_btn.clicked.connect(self.paste_and_fetch)
+        self.paste_btn = QPushButton()
+        self.paste_btn.clicked.connect(self.paste_and_fetch)
 
-        row.addWidget(QLabel("Link:"))
+        row.addWidget(self.link_label)
         row.addWidget(self.url_edit, 1)
-        row.addWidget(paste_btn)
+        row.addWidget(self.paste_btn)
         row.addWidget(self.fetch_btn)
         return box
 
@@ -211,25 +235,19 @@ class MainWindow(QMainWindow):
         return self.info_panel
 
     def _build_mode_box(self):
-        box = QGroupBox("What do you want?")
-        row = QHBoxLayout(box)
+        self.mode_box = QGroupBox()
+        row = QHBoxLayout(self.mode_box)
         self.mode_group = QButtonGroup(self)
 
-        specs = [
-            ("video", "Video", "Video and audio together, muxed without re-encoding"),
-            ("audio", "Audio (original)", "The audio stream exactly as YouTube stores it - no quality loss"),
-            ("mp3", "MP3", "The audio converted to MP3 (a second lossy step)"),
-        ]
         self.mode_buttons = {}
-        for i, (key, label, tip) in enumerate(specs):
-            btn = QRadioButton(label)
-            btn.setToolTip(tip)
+        for i, key in enumerate(("video", "audio", "mp3")):
+            btn = QRadioButton()
             btn.setChecked(key == "video")
             self.mode_group.addButton(btn, i)
             self.mode_buttons[key] = btn
             btn.toggled.connect(self._sync_mode)
             row.addWidget(btn)
-        return box
+        return self.mode_box
 
     def _build_options(self):
         self.opt_stack = QStackedWidget()
@@ -239,17 +257,15 @@ class MainWindow(QMainWindow):
         g = QGridLayout(video)
         g.setContentsMargins(0, 0, 0, 0)
         self.res_combo = QComboBox()
-        self.res_combo.addItem("Best available", "best")
+        self.res_combo.addItem("", "best")
         self.container_combo = QComboBox()
-        self.container_combo.addItem("MP4 - plays everywhere", "mp4")
-        self.container_combo.addItem("MKV - keeps the highest-quality streams as-is", "mkv")
-        self.container_combo.setToolTip(
-            "YouTube serves 4K only as VP9/AV1, which MP4 can't always hold.\n"
-            "Choose MKV if you want maximum quality."
-        )
-        g.addWidget(QLabel("Resolution:"), 0, 0)
+        self.container_combo.addItem("", "mp4")
+        self.container_combo.addItem("", "mkv")
+        self.res_label = QLabel()
+        self.container_label = QLabel()
+        g.addWidget(self.res_label, 0, 0)
         g.addWidget(self.res_combo, 0, 1)
-        g.addWidget(QLabel("Container:"), 1, 0)
+        g.addWidget(self.container_label, 1, 0)
         g.addWidget(self.container_combo, 1, 1)
         g.setColumnStretch(1, 1)
         self.opt_stack.addWidget(video)
@@ -259,10 +275,10 @@ class MainWindow(QMainWindow):
         g = QGridLayout(audio)
         g.setContentsMargins(0, 0, 0, 0)
         self.acodec_combo = QComboBox()
-        self.acodec_combo.addItem("Best available (no re-encoding)", "best")
-        self.acodec_combo.addItem("Prefer Opus (.opus)", "opus")
-        self.acodec_combo.addItem("Prefer AAC (.m4a)", "m4a")
-        g.addWidget(QLabel("Stream:"), 0, 0)
+        for value in ("best", "opus", "m4a"):
+            self.acodec_combo.addItem("", value)
+        self.stream_label = QLabel()
+        g.addWidget(self.stream_label, 0, 0)
         g.addWidget(self.acodec_combo, 0, 1)
         g.setColumnStretch(1, 1)
         self.opt_stack.addWidget(audio)
@@ -272,16 +288,11 @@ class MainWindow(QMainWindow):
         g = QGridLayout(mp3)
         g.setContentsMargins(0, 0, 0, 0)
         self.bitrate_combo = QComboBox()
-        for label, value in [
-            ("VBR V0 - best quality (~245 kbps)", "0"),
-            ("320 kbps CBR", "320"),
-            ("256 kbps CBR", "256"),
-            ("192 kbps CBR", "192"),
-            ("128 kbps CBR", "128"),
-        ]:
-            self.bitrate_combo.addItem(label, value)
+        for value in ("0", "320", "256", "192", "128"):
+            self.bitrate_combo.addItem("", value)
         self.bitrate_combo.setCurrentIndex(3)
-        g.addWidget(QLabel("Bitrate:"), 0, 0)
+        self.bitrate_label = QLabel()
+        g.addWidget(self.bitrate_label, 0, 0)
         g.addWidget(self.bitrate_combo, 0, 1)
         g.setColumnStretch(1, 1)
         self.opt_stack.addWidget(mp3)
@@ -290,7 +301,7 @@ class MainWindow(QMainWindow):
         col = QVBoxLayout(wrapper)
         col.setContentsMargins(0, 0, 0, 0)
         col.addWidget(self.opt_stack)
-        self.embed_check = QCheckBox("Embed cover art and metadata")
+        self.embed_check = QCheckBox()
         self.embed_check.setChecked(True)
         col.addWidget(self.embed_check)
         return wrapper
@@ -301,22 +312,23 @@ class MainWindow(QMainWindow):
         row.setContentsMargins(0, 0, 0, 0)
         self.dest_edit = QLineEdit(str(self.dest_dir))
         self.dest_edit.setReadOnly(True)
-        browse = QPushButton("Change...")
-        browse.clicked.connect(self.choose_dest)
-        row.addWidget(QLabel("Save to:"))
+        self.dest_label = QLabel()
+        self.browse_btn = QPushButton()
+        self.browse_btn.clicked.connect(self.choose_dest)
+        row.addWidget(self.dest_label)
         row.addWidget(self.dest_edit, 1)
-        row.addWidget(browse)
+        row.addWidget(self.browse_btn)
         return box
 
     def _build_actions(self):
         box = QWidget()
         row = QHBoxLayout(box)
         row.setContentsMargins(0, 0, 0, 0)
-        self.download_btn = QPushButton("Download")
+        self.download_btn = QPushButton()
         self.download_btn.setMinimumHeight(38)
         self.download_btn.setDefault(True)
         self.download_btn.clicked.connect(self.start_download)
-        self.cancel_btn = QPushButton("Cancel")
+        self.cancel_btn = QPushButton()
         self.cancel_btn.setMinimumHeight(38)
         self.cancel_btn.setVisible(False)
         self.cancel_btn.clicked.connect(self.cancel_download)
@@ -342,7 +354,7 @@ class MainWindow(QMainWindow):
         self.progress_bar.setTextVisible(False)
         self.progress_bar.setMaximumHeight(10)
 
-        self.open_btn = QPushButton("Show in folder")
+        self.open_btn = QPushButton()
         self.open_btn.setVisible(False)
         self.open_btn.clicked.connect(self.open_dest)
 
@@ -352,11 +364,81 @@ class MainWindow(QMainWindow):
         self.progress_panel.setVisible(False)
         return self.progress_panel
 
+    # -- language ----------------------------------------------------------
+
+    def set_language(self, code):
+        if code == i18n.language():
+            return
+        i18n.set_language(code)
+        QSettings("ytgrab", "ytgrab").setValue("language", code)
+        self.retranslate()
+
+    @staticmethod
+    def _relabel(combo, labels):
+        """Retitle combo items in place, keeping the current selection."""
+        for index, text in enumerate(labels):
+            combo.setItemText(index, text)
+
+    def retranslate(self):
+        """Apply the active language to every widget that shows text."""
+        self.lang_menu.setTitle(t("menu_language"))
+        for code, action in self.lang_actions.items():
+            action.setChecked(code == i18n.language())
+
+        self.link_label.setText(t("link"))
+        self.url_edit.setPlaceholderText(t("url_placeholder"))
+        self.fetch_btn.setText(t("fetching") if self.fetching else t("fetch"))
+        self.paste_btn.setText(t("paste"))
+        self.paste_btn.setToolTip(t("paste_tip"))
+
+        self.mode_box.setTitle(t("mode_title"))
+        for key, btn in self.mode_buttons.items():
+            btn.setText(t(f"mode_{key}"))
+            btn.setToolTip(t(f"mode_{key}_tip"))
+
+        self.res_label.setText(t("resolution"))
+        self.container_label.setText(t("container"))
+        self.stream_label.setText(t("stream"))
+        self.bitrate_label.setText(t("bitrate"))
+        # Only the first resolution entry is a word; the rest are "1080p".
+        self.res_combo.setItemText(0, t("best_available"))
+        self._relabel(self.container_combo, [t("container_mp4"), t("container_mkv")])
+        self.container_combo.setToolTip(t("container_tip"))
+        self._relabel(self.acodec_combo,
+                      [t("audio_best"), t("audio_opus"), t("audio_m4a")])
+        self._relabel(self.bitrate_combo,
+                      [t("bitrate_v0")] + [t("bitrate_cbr", kbps=k)
+                                           for k in ("320", "256", "192", "128")])
+        self.embed_check.setText(t("embed"))
+
+        self.dest_label.setText(t("save_to"))
+        self.browse_btn.setText(t("change"))
+        self.download_btn.setText(t("download"))
+        self.cancel_btn.setText(t("cancel"))
+        self.open_btn.setText(t("show_in_folder"))
+
+        if self.info:
+            self._show_meta(self.info)
+        if self._state_text:
+            self.state_label.setText(self._state_text())
+        if self._stats_text:
+            self.stats_label.setText(self._stats_text())
+        self.statusBar().showMessage(self._ffmpeg_status())
+
     # -- behaviour ---------------------------------------------------------
+
+    def _set_state(self, render):
+        """Show progress text, remembering how to redraw it in another language."""
+        self._state_text = render
+        self.state_label.setText(render())
+
+    def _set_stats(self, render):
+        self._stats_text = render
+        self.stats_label.setText(render())
 
     def _ffmpeg_status(self):
         loc = core.ffmpeg_location()
-        return f"ffmpeg: {loc}" if loc else "ffmpeg not found - conversion will fail"
+        return t("ffmpeg_at", path=loc) if loc else t("ffmpeg_status_missing")
 
     def current_mode(self):
         for key, btn in self.mode_buttons.items():
@@ -373,8 +455,9 @@ class MainWindow(QMainWindow):
         # A new link invalidates whatever metadata is on screen.
         if self.info_panel.isVisible():
             self.info_panel.setVisible(False)
+            self.info = None
             self.res_combo.clear()
-            self.res_combo.addItem("Best available", "best")
+            self.res_combo.addItem(t("best_available"), "best")
 
     def paste_and_fetch(self):
         text = QApplication.clipboard().text().strip()
@@ -385,14 +468,15 @@ class MainWindow(QMainWindow):
     def fetch_info(self):
         url = self.url_edit.text().strip()
         if not core.is_supported_url(url):
-            self.statusBar().showMessage("Enter a valid http(s) link.", 5000)
+            self.statusBar().showMessage(t("invalid_link"), 5000)
             return
         if self.info_worker and self.info_worker.isRunning():
             return
 
+        self.fetching = True
         self.fetch_btn.setEnabled(False)
-        self.fetch_btn.setText("Reading...")
-        self.statusBar().showMessage("Reading video details...")
+        self.fetch_btn.setText(t("fetching"))
+        self.statusBar().showMessage(t("reading_details"))
 
         self.info_worker = InfoWorker(url)
         self.info_worker.finished_ok.connect(self._on_info)
@@ -401,18 +485,23 @@ class MainWindow(QMainWindow):
         self.info_worker.start()
 
     def _reset_fetch_btn(self):
+        self.fetching = False
         self.fetch_btn.setEnabled(True)
-        self.fetch_btn.setText("Fetch")
+        self.fetch_btn.setText(t("fetch"))
 
-    def _on_info(self, info):
+    def _show_meta(self, info):
         self.title_label.setText(info["title"])
         bits = [b for b in (info["uploader"],
                             core.format_duration(info["duration"]),
-                            "LIVE" if info["is_live"] else "") if b]
+                            t("live") if info["is_live"] else "") if b]
         self.meta_label.setText("  ·  ".join(bits))
 
+    def _on_info(self, info):
+        self.info = info
+        self._show_meta(info)
+
         self.res_combo.clear()
-        self.res_combo.addItem("Best available", "best")
+        self.res_combo.addItem(t("best_available"), "best")
         for h in info["heights"]:
             self.res_combo.addItem(f"{h}p", str(h))
 
@@ -423,7 +512,7 @@ class MainWindow(QMainWindow):
             self.thumb_worker.start()
 
         self.info_panel.setVisible(True)
-        self.statusBar().showMessage("Ready.", 4000)
+        self.statusBar().showMessage(t("ready"), 4000)
 
     def _on_thumb(self, data):
         pix = QPixmap()
@@ -431,12 +520,13 @@ class MainWindow(QMainWindow):
             self.thumb_label.setPixmap(pix)
 
     def _on_info_failed(self, message):
+        self.info = None
         self.info_panel.setVisible(False)
-        self.statusBar().showMessage("Could not read that link.", 6000)
-        QMessageBox.warning(self, "Could not read that link", message)
+        self.statusBar().showMessage(t("read_failed"), 6000)
+        QMessageBox.warning(self, t("read_failed_title"), message)
 
     def choose_dest(self):
-        chosen = QFileDialog.getExistingDirectory(self, "Save downloads to", str(self.dest_dir))
+        chosen = QFileDialog.getExistingDirectory(self, t("choose_dir"), str(self.dest_dir))
         if chosen:
             self.dest_dir = Path(chosen)
             self.dest_edit.setText(chosen)
@@ -448,13 +538,10 @@ class MainWindow(QMainWindow):
     def start_download(self):
         url = self.url_edit.text().strip()
         if not core.is_supported_url(url):
-            QMessageBox.warning(self, "No link", "Paste a video link first.")
+            QMessageBox.warning(self, t("no_link_title"), t("no_link_body"))
             return
         if not core.ffmpeg_location():
-            QMessageBox.critical(
-                self, "ffmpeg missing",
-                "ffmpeg could not be found, so merging and conversion cannot run.",
-            )
+            QMessageBox.critical(self, t("ffmpeg_missing_title"), t("ffmpeg_missing_body"))
             return
 
         mode = self.current_mode()
@@ -469,8 +556,8 @@ class MainWindow(QMainWindow):
         self.progress_panel.setVisible(True)
         self.open_btn.setVisible(False)
         self.progress_bar.setRange(0, 0)  # indeterminate until bytes arrive
-        self.state_label.setText("Starting...")
-        self.stats_label.setText("")
+        self._set_state(lambda: t("starting"))
+        self._set_stats(lambda: "")
 
         self.dl_worker = DownloadWorker(
             url, self.dest_dir, mode, quality,
@@ -486,30 +573,35 @@ class MainWindow(QMainWindow):
     def cancel_download(self):
         if self.dl_worker and self.dl_worker.isRunning():
             self.cancel_btn.setEnabled(False)
-            self.state_label.setText("Cancelling...")
+            self._set_state(lambda: t("cancelling"))
             self.dl_worker.cancel()
 
     def _on_progress(self, p):
         if p["total"]:
             self.progress_bar.setRange(0, 100)
             self.progress_bar.setValue(int(p["percent"]))
-            self.state_label.setText(f"Downloading  {p['percent']:.1f}%")
+            self._set_state(lambda: t("downloading_percent",
+                                      percent=i18n.number(p["percent"])))
         else:
             self.progress_bar.setRange(0, 0)
-            self.state_label.setText("Downloading")
-        bits = []
-        if p["total"]:
-            bits.append(f"{core.format_size(p['downloaded'])} / {core.format_size(p['total'])}")
-        if p["speed"]:
-            bits.append(f"{core.format_size(p['speed'])}/s")
-        if p["eta"]:
-            bits.append(f"{core.format_duration(p['eta'])} left")
-        self.stats_label.setText("   ·   ".join(bits))
+            self._set_state(lambda: t("downloading"))
 
-    def _on_stage(self, stage):
+        def stats():
+            bits = []
+            if p["total"]:
+                bits.append(f"{core.format_size(p['downloaded'])} / {core.format_size(p['total'])}")
+            if p["speed"]:
+                bits.append(f"{core.format_size(p['speed'])}/s")
+            if p["eta"]:
+                bits.append(t("eta_left", time=core.format_duration(p["eta"])))
+            return "   ·   ".join(bits)
+
+        self._set_stats(stats)
+
+    def _on_stage(self, key):
         self.progress_bar.setRange(0, 0)
-        self.state_label.setText(stage + "...")
-        self.stats_label.setText("")
+        self._set_state(lambda: t(key) + "…")
+        self._set_stats(lambda: "")
 
     def _finish_ui(self):
         self.download_btn.setVisible(True)
@@ -520,26 +612,26 @@ class MainWindow(QMainWindow):
         self.last_file = Path(path)
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(100)
-        self.state_label.setText("Saved")
+        self._set_state(lambda: t("saved"))
         size = self.last_file.stat().st_size if self.last_file.exists() else 0
-        self.stats_label.setText(f"{self.last_file.name}   ·   {core.format_size(size)}")
+        self._set_stats(lambda: f"{self.last_file.name}   ·   {core.format_size(size)}")
         self.open_btn.setVisible(True)
-        self.statusBar().showMessage(f"Saved to {self.last_file}", 8000)
+        self.statusBar().showMessage(t("saved_to", path=self.last_file), 8000)
         self._finish_ui()
 
     def _on_failed(self, message):
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
-        self.state_label.setText("Failed")
-        self.stats_label.setText("")
+        self._set_state(lambda: t("failed"))
+        self._set_stats(lambda: "")
         self._finish_ui()
-        QMessageBox.critical(self, "Download failed", message)
+        QMessageBox.critical(self, t("download_failed_title"), message)
 
     def _on_cancelled(self):
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
-        self.state_label.setText("Cancelled")
-        self.stats_label.setText("")
+        self._set_state(lambda: t("cancelled"))
+        self._set_stats(lambda: "")
         self._finish_ui()
 
     def closeEvent(self, event):
@@ -564,11 +656,19 @@ def make_icon():
     return QIcon(pix)
 
 
+def startup_language():
+    """A remembered choice wins; otherwise follow the system, then English."""
+    saved = i18n.normalise(QSettings("ytgrab", "ytgrab").value("language"))
+    # QLocale knows the UI language on macOS, where the env vars are unset.
+    return saved or i18n.normalise(QLocale.system().name()) or i18n.detect_language()
+
+
 def main():
     app = QApplication(sys.argv)
     app.setApplicationName("ytgrab")
     app.setApplicationDisplayName("ytgrab")
     app.setWindowIcon(make_icon())
+    i18n.set_language(startup_language())
     win = MainWindow()
     win.show()
     sys.exit(app.exec())

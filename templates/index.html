@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="{{ lang }}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -88,17 +88,21 @@
     font-weight: 600; text-decoration: none;
   }
   .foot { color: var(--muted); font-size: 12px; text-align: center; margin-top: 24px; }
+  .foot a { color: var(--muted); }
+  .langs { margin-top: 6px; }
+  .langs a { text-decoration: none; margin: 0 4px; }
+  .langs a.on { color: var(--text); font-weight: 600; }
 </style>
 </head>
 <body>
 <div class="wrap">
   <h1>yt<span>grab</span></h1>
-  <div class="sub">Download a video, or pull the audio stream straight out untouched.</div>
+  <div class="sub">{{ t.web_tagline }}</div>
 
   <div class="card">
     <div class="row">
       <input id="url" type="url" placeholder="https://www.youtube.com/watch?v=..." autofocus>
-      <button id="fetch">Fetch</button>
+      <button id="fetch">{{ t.fetch }}</button>
     </div>
     <div id="infoErr" class="err hidden" style="margin-top:12px"></div>
   </div>
@@ -113,73 +117,86 @@
 
   <div id="opts" class="card hidden">
     <div class="modes">
-      <div class="mode active" data-mode="video"><b>Video</b><small>with audio</small></div>
-      <div class="mode" data-mode="audio"><b>Audio</b><small>original stream</small></div>
-      <div class="mode" data-mode="mp3"><b>MP3</b><small>converted</small></div>
+      <div class="mode active" data-mode="video"><b>{{ t.web_mode_video }}</b><small>{{ t.web_mode_video_sub }}</small></div>
+      <div class="mode" data-mode="audio"><b>{{ t.web_mode_audio }}</b><small>{{ t.web_mode_audio_sub }}</small></div>
+      <div class="mode" data-mode="mp3"><b>{{ t.web_mode_mp3 }}</b><small>{{ t.web_mode_mp3_sub }}</small></div>
     </div>
 
     <div id="videoOpts">
-      <label class="field">Resolution
-        <select id="res"><option value="best">Best available</option></select>
+      <label class="field">{{ t.web_resolution }}
+        <select id="res"><option value="best">{{ t.best_available }}</option></select>
       </label>
-      <label class="field">Container
+      <label class="field">{{ t.web_container }}
         <select id="container">
-          <option value="mp4">MP4 — most compatible</option>
-          <option value="mkv">MKV — keeps the highest-quality streams as-is</option>
+          <option value="mp4">{{ t.web_container_mp4 }}</option>
+          <option value="mkv">{{ t.web_container_mkv }}</option>
         </select>
       </label>
     </div>
 
     <div id="audioOpts" class="hidden">
-      <label class="field">Stream
+      <label class="field">{{ t.web_stream }}
         <select id="acodec">
-          <option value="best">Best available (no re-encoding)</option>
-          <option value="opus">Prefer Opus (.opus)</option>
-          <option value="m4a">Prefer AAC (.m4a)</option>
+          <option value="best">{{ t.audio_best }}</option>
+          <option value="opus">{{ t.audio_opus }}</option>
+          <option value="m4a">{{ t.audio_m4a }}</option>
         </select>
       </label>
     </div>
 
     <div id="mp3Opts" class="hidden">
-      <label class="field">Bitrate
+      <label class="field">{{ t.web_bitrate }}
         <select id="bitrate">
-          <option value="0">VBR V0 — best quality (~245 kbps)</option>
-          <option value="320">320 kbps CBR</option>
-          <option value="256">256 kbps CBR</option>
-          <option value="192" selected>192 kbps CBR</option>
-          <option value="128">128 kbps CBR</option>
+          <option value="0">{{ t.bitrate_v0 }}</option>
+          {% for kbps in ["320", "256", "192", "128"] %}
+          <option value="{{ kbps }}"{% if kbps == "192" %} selected{% endif %}>{{ t.bitrate_cbr.format(kbps=kbps) }}</option>
+          {% endfor %}
         </select>
       </label>
     </div>
 
     <label class="check" id="thumbRow">
-      <input type="checkbox" id="embed" checked> Embed cover art and metadata
+      <input type="checkbox" id="embed" checked> {{ t.embed }}
     </label>
 
-    <button class="primary" id="go">Download</button>
+    <button class="primary" id="go">{{ t.download }}</button>
   </div>
 
   <div id="prog" class="card hidden">
-    <div class="status"><span id="stateTxt">Starting…</span><span id="statNums"></span></div>
+    <div class="status"><span id="stateTxt">{{ t.starting }}</span><span id="statNums"></span></div>
     <div class="bar" id="bar"><i id="fill"></i></div>
     <div id="progErr" class="err hidden" style="margin-top:12px"></div>
-    <a id="dl" class="dl hidden">Save file</a>
+    <a id="dl" class="dl hidden">{{ t.web_save_file }}</a>
   </div>
 
-  <div class="foot">Runs locally via yt-dlp + ffmpeg. For content you have the right to download.</div>
+  <div class="foot">
+    {{ t.web_footer }}
+    <div class="langs">
+      {% for code, name in languages %}<a href="?lang={{ code }}" class="{{ 'on' if code == lang }}">{{ name }}</a>{% endfor %}
+    </div>
+  </div>
 </div>
 
 <script>
+const T = {{ t | tojson }};
 const $ = id => document.getElementById(id);
 let mode = "video";
 let poll = null;
+
+// Slovak writes 1,5 MB where English writes 1.5 MB.
+function num(value, digits) {
+  return value.toFixed(digits).replace(".", T.decimal_separator);
+}
+function fill(template, fields) {
+  return template.replace(/\{(\w+)\}/g, (_, key) => fields[key]);
+}
 
 function fmtSize(b) {
   if (!b) return "";
   const u = ["B", "KB", "MB", "GB"];
   let i = 0;
   while (b >= 1024 && i < u.length - 1) { b /= 1024; i++; }
-  return b.toFixed(i ? 1 : 0) + " " + u[i];
+  return num(b, i ? 1 : 0) + " " + u[i];
 }
 function fmtDur(s) {
   if (!s) return "";
@@ -212,17 +229,18 @@ async function fetchInfo() {
       body: JSON.stringify({ url })
     });
     const d = await r.json();
-    if (!r.ok) throw new Error(d.error || "Could not read that link.");
+    if (!r.ok) throw new Error(d.error || T.read_failed);
 
     $("thumb").src = d.thumbnail || "";
     $("thumb").classList.toggle("hidden", !d.thumbnail);
     $("title").textContent = d.title || "";
-    $("submeta").textContent = [d.uploader, fmtDur(d.duration), d.is_live ? "LIVE" : ""]
+    $("submeta").textContent = [d.uploader, fmtDur(d.duration), d.is_live ? T.live : ""]
       .filter(Boolean).join(" · ");
     $("info").classList.remove("hidden");
 
     const res = $("res");
-    res.innerHTML = '<option value="best">Best available</option>';
+    res.innerHTML = '<option value="best"></option>';
+    res.firstChild.textContent = T.best_available;
     (d.heights || []).forEach(h => {
       const o = document.createElement("option");
       o.value = h;
@@ -235,7 +253,7 @@ async function fetchInfo() {
     $("infoErr").classList.remove("hidden");
   } finally {
     $("fetch").disabled = false;
-    $("fetch").textContent = "Fetch";
+    $("fetch").textContent = T.fetch;
   }
 }
 
@@ -258,7 +276,7 @@ $("go").onclick = async () => {
   $("progErr").classList.add("hidden");
   $("dl").classList.add("hidden");
   $("fill").style.width = "0";
-  $("stateTxt").textContent = "Starting…";
+  $("stateTxt").textContent = T.starting;
   $("statNums").textContent = "";
 
   const r = await fetch("/api/download", {
@@ -286,33 +304,34 @@ async function checkStatus(id) {
   if (j.state === "downloading") {
     $("bar").classList.remove("indet");
     $("fill").style.width = (j.percent || 0) + "%";
-    $("stateTxt").textContent = "Downloading… " + (j.percent || 0).toFixed(1) + "%";
+    $("stateTxt").textContent = fill(T.web_downloading, { percent: num(j.percent || 0, 1) });
     const parts = [];
     if (j.total) parts.push(fmtSize(j.downloaded) + " / " + fmtSize(j.total));
     if (j.speed) parts.push(fmtSize(j.speed) + "/s");
-    if (j.eta) parts.push(fmtDur(j.eta) + " left");
+    if (j.eta) parts.push(fill(T.eta_left, { time: fmtDur(j.eta) }));
     $("statNums").textContent = parts.join("  ·  ");
   } else if (j.state === "processing" || j.state === "starting" || j.state === "queued") {
     $("bar").classList.add("indet");
     $("stateTxt").textContent = j.state === "processing"
-      ? (j.stage ? j.stage.charAt(0).toUpperCase() + j.stage.slice(1) + "…" : "Processing…")
-      : "Starting…";
+      ? (j.stage || T.stage_processing) + "…"
+      : T.starting;
     $("statNums").textContent = "";
   } else if (j.state === "done") {
     clearInterval(poll);
     $("bar").classList.remove("indet");
     $("fill").style.width = "100%";
-    $("stateTxt").innerHTML = '<span class="done">Ready</span>';
+    $("stateTxt").innerHTML = '<span class="done"></span>';
+    $("stateTxt").firstChild.textContent = T.web_done;
     $("statNums").textContent = fmtSize(j.filesize);
     const a = $("dl");
     a.href = "/api/file/" + id;
-    a.textContent = "Save " + j.filename;
+    a.textContent = fill(T.web_save_named, { name: j.filename });
     a.classList.remove("hidden");
     $("go").disabled = false;
   } else if (j.state === "error") {
     clearInterval(poll);
     $("bar").classList.remove("indet");
-    $("stateTxt").textContent = "Failed";
+    $("stateTxt").textContent = T.failed;
     $("progErr").textContent = j.error;
     $("progErr").classList.remove("hidden");
     $("go").disabled = false;

@@ -15,6 +15,9 @@ from urllib.parse import urlparse
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError
 
+from . import i18n
+from .i18n import t
+
 MODES = ("video", "audio", "mp3")
 CONTAINERS = ("mp4", "mkv")
 
@@ -90,20 +93,24 @@ def is_supported_url(url):
     return parsed.scheme in ("http", "https") and bool(parsed.netloc)
 
 
-def clean_error(message):
-    """Turn a yt-dlp exception into something worth showing a user."""
+def clean_error(message, lang=None):
+    """Turn a yt-dlp exception into something worth showing a user.
+
+    The engine itself raises in English so the strings stay greppable against
+    yt-dlp's own output; the translation happens here, on the way to the UI.
+    """
     message = re.sub(r"\x1b\[[0-9;]*m", "", str(message))
     message = message.replace("ERROR: ", "").strip()
     if "Sign in to confirm" in message or "not a bot" in message:
-        return (
-            "YouTube asked this machine to confirm it isn't a bot. This usually "
-            "means the connection or IP is rate limited; trying again later, or "
-            "from a different network, normally clears it."
-        )
+        return t("err_bot", lang)
     if "Video unavailable" in message:
-        return "That video is unavailable - it may be private, removed or region locked."
+        return t("err_unavailable", lang)
     if "is not a valid URL" in message or "Unsupported URL" in message:
-        return "That link isn't one yt-dlp recognises."
+        return t("err_unsupported", lang)
+    if "No downloadable video found" in message:
+        return t("err_no_video", lang)
+    if "produced no output file" in message:
+        return t("err_no_output", lang)
     return message[:600]
 
 
@@ -283,12 +290,12 @@ def default_download_dir():
     return Path.home()
 
 
-def format_size(num):
+def format_size(num, lang=None):
     if not num:
         return ""
     for unit in ("B", "KB", "MB", "GB"):
         if num < 1024 or unit == "GB":
-            return f"{num:.1f} {unit}" if unit != "B" else f"{int(num)} B"
+            return f"{i18n.number(num, 1, lang)} {unit}" if unit != "B" else f"{int(num)} B"
         num /= 1024
     return ""
 

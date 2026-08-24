@@ -6,6 +6,8 @@ built on [yt-dlp](https://github.com/yt-dlp/yt-dlp) and ffmpeg.
 Runs on Linux, Windows and macOS. ffmpeg is bundled, so there is nothing else
 to install.
 
+*Toto si prečítajte po [slovensky](README.sk.md).*
+
 ## Download
 
 Grab a build from the [Releases](../../releases) page:
@@ -22,6 +24,13 @@ On Linux, mark it executable first: `chmod +x ytgrab-linux-x86_64`.
 The macOS and Windows builds are **unsigned**, because signing certificates
 cost money. The OS will warn you on first launch: on macOS right-click the app
 and choose *Open*, on Windows click *More info* then *Run anyway*.
+
+## Language
+
+The app follows the system language: it starts in Slovak on a Slovak system and
+in English otherwise. You can switch at any time from the *Language* menu, and
+the choice is remembered for next time. The browser version follows the
+browser's language setting and switches from the links in the page footer.
 
 ## Modes
 

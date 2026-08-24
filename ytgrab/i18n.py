@@ -1,0 +1,339 @@
+"""Interface strings for ytgrab, in English and Slovak.
+
+The whole app reads its text through :func:`t`. The active language is a
+module-level setting so the download engine can produce localised error
+messages without every caller having to thread a language code through it;
+the web app, which serves one request at a time per language, passes the code
+explicitly instead.
+"""
+
+import locale
+import os
+import sys
+
+DEFAULT_LANGUAGE = "en"
+
+# Shown in the language menu, in each language's own name.
+LANGUAGE_NAMES = {"en": "English", "sk": "Slovenčina"}
+
+STRINGS = {
+    "en": {
+        # -- window chrome --
+        "menu_language": "&Language",
+
+        # -- link row --
+        "link": "Link:",
+        "url_placeholder": "https://www.youtube.com/watch?v=...",
+        "fetch": "Fetch",
+        "fetching": "Reading…",
+        "paste": "Paste",
+        "paste_tip": "Paste a link from the clipboard and read its details",
+
+        # -- info panel --
+        "live": "LIVE",
+
+        # -- mode picker --
+        "mode_title": "What do you want?",
+        "mode_video": "Video",
+        "mode_video_tip": "Video and audio together, muxed without re-encoding",
+        "mode_audio": "Audio (original)",
+        "mode_audio_tip": "The audio stream exactly as YouTube stores it - no quality loss",
+        "mode_mp3": "MP3",
+        "mode_mp3_tip": "The audio converted to MP3 (a second lossy step)",
+
+        # -- options --
+        "resolution": "Resolution:",
+        "container": "Container:",
+        "best_available": "Best available",
+        "container_mp4": "MP4 - plays everywhere",
+        "container_mkv": "MKV - keeps the highest-quality streams as-is",
+        "container_tip": ("YouTube serves 4K only as VP9/AV1, which MP4 can't always hold.\n"
+                          "Choose MKV if you want maximum quality."),
+        "stream": "Stream:",
+        "audio_best": "Best available (no re-encoding)",
+        "audio_opus": "Prefer Opus (.opus)",
+        "audio_m4a": "Prefer AAC (.m4a)",
+        "bitrate": "Bitrate:",
+        "bitrate_v0": "VBR V0 - best quality (~245 kbps)",
+        "bitrate_cbr": "{kbps} kbps CBR",
+        "embed": "Embed cover art and metadata",
+
+        # -- destination --
+        "save_to": "Save to:",
+        "change": "Change…",
+        "choose_dir": "Save downloads to",
+
+        # -- actions --
+        "download": "Download",
+        "cancel": "Cancel",
+        "show_in_folder": "Show in folder",
+
+        # -- status bar --
+        "ffmpeg_at": "ffmpeg: {path}",
+        "ffmpeg_status_missing": "ffmpeg not found - conversion will fail",
+        "invalid_link": "Enter a valid http(s) link.",
+        "reading_details": "Reading video details…",
+        "ready": "Ready.",
+        "read_failed": "Could not read that link.",
+        "read_failed_title": "Could not read that link",
+        "saved_to": "Saved to {path}",
+
+        # -- dialogs --
+        "no_link_title": "No link",
+        "no_link_body": "Paste a video link first.",
+        "ffmpeg_missing_title": "ffmpeg missing",
+        "ffmpeg_missing_body": "ffmpeg could not be found, so merging and conversion cannot run.",
+        "download_failed_title": "Download failed",
+
+        # -- progress --
+        "starting": "Starting…",
+        "cancelling": "Cancelling…",
+        "downloading": "Downloading",
+        "downloading_percent": "Downloading  {percent}%",
+        "eta_left": "{time} left",
+        "saved": "Saved",
+        "failed": "Failed",
+        "cancelled": "Cancelled",
+
+        # -- postprocessing stages --
+        "stage_processing": "Processing",
+        "stage_ExtractAudio": "Extracting audio",
+        "stage_Merger": "Merging video and audio",
+        "stage_VideoRemuxer": "Remuxing",
+        "stage_VideoConvertor": "Converting",
+        "stage_EmbedThumbnail": "Embedding cover art",
+        "stage_Metadata": "Writing metadata",
+        "stage_MoveFiles": "Finishing up",
+
+        # -- engine errors --
+        "err_bot": ("YouTube asked this machine to confirm it isn't a bot. This usually "
+                    "means the connection or IP is rate limited; trying again later, or "
+                    "from a different network, normally clears it."),
+        "err_unavailable": "That video is unavailable - it may be private, removed or region locked.",
+        "err_unsupported": "That link isn't one yt-dlp recognises.",
+        "err_no_video": "No downloadable video found at that link.",
+        "err_no_output": "yt-dlp finished but produced no output file.",
+
+        # -- browser version --
+        "web_tagline": "Download a video, or pull the audio stream straight out untouched.",
+        "web_mode_video": "Video",
+        "web_mode_audio": "Audio",
+        "web_mode_mp3": "MP3",
+        "web_mode_video_sub": "with audio",
+        "web_mode_audio_sub": "original stream",
+        "web_mode_mp3_sub": "converted",
+        "web_resolution": "Resolution",
+        "web_container": "Container",
+        "web_container_mp4": "MP4 — most compatible",
+        "web_container_mkv": "MKV — keeps the highest-quality streams as-is",
+        "web_stream": "Stream",
+        "web_bitrate": "Bitrate",
+        "web_done": "Ready",
+        "web_save_file": "Save file",
+        "web_save_named": "Save {name}",
+        "web_downloading": "Downloading… {percent}%",
+        "web_footer": "Runs locally via yt-dlp + ffmpeg. For content you have the right to download.",
+        "decimal_separator": ".",
+        "err_unknown_mode": "Unknown download mode.",
+        "err_unknown_container": "Unknown container.",
+        "err_unknown_job": "Unknown job.",
+        "err_file_not_ready": "File is not ready.",
+        "err_file_missing": "File is missing.",
+    },
+
+    "sk": {
+        # -- window chrome --
+        "menu_language": "&Jazyk",
+
+        # -- link row --
+        "link": "Odkaz:",
+        "url_placeholder": "https://www.youtube.com/watch?v=...",
+        "fetch": "Načítať",
+        "fetching": "Načítava sa…",
+        "paste": "Prilepiť",
+        "paste_tip": "Prilepí odkaz zo schránky a načíta jeho údaje",
+
+        # -- info panel --
+        "live": "NAŽIVO",
+
+        # -- mode picker --
+        "mode_title": "Čo chcete stiahnuť?",
+        "mode_video": "Video",
+        "mode_video_tip": "Video aj zvuk v jednom súbore, spojené bez opätovného kódovania",
+        "mode_audio": "Zvuk (pôvodný)",
+        "mode_audio_tip": "Zvuková stopa presne v tej podobe, v akej ju ukladá YouTube – bez straty kvality",
+        "mode_mp3": "MP3",
+        "mode_mp3_tip": "Zvuk prevedený do MP3 (ďalšia stratová konverzia)",
+
+        # -- options --
+        "resolution": "Rozlíšenie:",
+        "container": "Kontajner:",
+        "best_available": "Najlepšie dostupné",
+        "container_mp4": "MP4 – prehrá sa všade",
+        "container_mkv": "MKV – ponechá najkvalitnejšie stopy bez zmeny",
+        "container_tip": ("YouTube ponúka 4K len vo formáte VP9/AV1, ktorý sa do MP4 nie vždy zmestí.\n"
+                          "Ak chcete najvyššiu kvalitu, vyberte MKV."),
+        "stream": "Stopa:",
+        "audio_best": "Najlepšia dostupná (bez prekódovania)",
+        "audio_opus": "Uprednostniť Opus (.opus)",
+        "audio_m4a": "Uprednostniť AAC (.m4a)",
+        "bitrate": "Dátový tok:",
+        "bitrate_v0": "VBR V0 – najvyššia kvalita (~245 kb/s)",
+        "bitrate_cbr": "{kbps} kb/s CBR",
+        "embed": "Vložiť obal a metaúdaje",
+
+        # -- destination --
+        "save_to": "Uložiť do:",
+        "change": "Zmeniť…",
+        "choose_dir": "Kam ukladať stiahnuté súbory",
+
+        # -- actions --
+        "download": "Stiahnuť",
+        "cancel": "Zrušiť",
+        "show_in_folder": "Zobraziť v priečinku",
+
+        # -- status bar --
+        "ffmpeg_at": "ffmpeg: {path}",
+        "ffmpeg_status_missing": "ffmpeg sa nenašiel – konverzia zlyhá",
+        "invalid_link": "Zadajte platný odkaz http(s).",
+        "reading_details": "Načítavajú sa údaje o videu…",
+        "ready": "Hotovo.",
+        "read_failed": "Odkaz sa nepodarilo načítať.",
+        "read_failed_title": "Odkaz sa nepodarilo načítať",
+        "saved_to": "Uložené do {path}",
+
+        # -- dialogs --
+        "no_link_title": "Chýba odkaz",
+        "no_link_body": "Najprv prilepte odkaz na video.",
+        "ffmpeg_missing_title": "Chýba ffmpeg",
+        "ffmpeg_missing_body": "ffmpeg sa nepodarilo nájsť, takže spájanie ani konverzia nemôžu prebehnúť.",
+        "download_failed_title": "Sťahovanie zlyhalo",
+
+        # -- progress --
+        "starting": "Spúšťa sa…",
+        "cancelling": "Ruší sa…",
+        "downloading": "Sťahovanie",
+        "downloading_percent": "Sťahovanie  {percent} %",
+        "eta_left": "zostáva {time}",
+        "saved": "Uložené",
+        "failed": "Zlyhalo",
+        "cancelled": "Zrušené",
+
+        # -- postprocessing stages --
+        "stage_processing": "Spracovanie",
+        "stage_ExtractAudio": "Extrahovanie zvuku",
+        "stage_Merger": "Spájanie videa a zvuku",
+        "stage_VideoRemuxer": "Prebaľovanie",
+        "stage_VideoConvertor": "Konverzia",
+        "stage_EmbedThumbnail": "Vkladanie obalu",
+        "stage_Metadata": "Zapisovanie metaúdajov",
+        "stage_MoveFiles": "Dokončovanie",
+
+        # -- engine errors --
+        "err_bot": ("YouTube žiada od tohto počítača potvrdenie, že nie je robot. Zvyčajne to "
+                    "znamená, že pripojenie alebo IP adresa naráža na limit; väčšinou pomôže "
+                    "skúsiť to neskôr alebo z inej siete."),
+        "err_unavailable": "Toto video nie je dostupné – môže byť súkromné, odstránené alebo blokované vo vašej krajine.",
+        "err_unsupported": "Tento odkaz yt-dlp nepozná.",
+        "err_no_video": "Na tomto odkaze sa nenašlo žiadne video na stiahnutie.",
+        "err_no_output": "yt-dlp skončil, ale nevytvoril žiadny výstupný súbor.",
+
+        # -- browser version --
+        "web_tagline": "Stiahnite si video alebo z neho vytiahnite zvukovú stopu v pôvodnej podobe.",
+        "web_mode_video": "Video",
+        "web_mode_audio": "Zvuk",
+        "web_mode_mp3": "MP3",
+        "web_mode_video_sub": "so zvukom",
+        "web_mode_audio_sub": "pôvodná stopa",
+        "web_mode_mp3_sub": "konvertované",
+        "web_resolution": "Rozlíšenie",
+        "web_container": "Kontajner",
+        "web_container_mp4": "MP4 – najkompatibilnejší",
+        "web_container_mkv": "MKV – ponechá najkvalitnejšie stopy bez zmeny",
+        "web_stream": "Stopa",
+        "web_bitrate": "Dátový tok",
+        "web_done": "Hotovo",
+        "web_save_file": "Uložiť súbor",
+        "web_save_named": "Uložiť {name}",
+        "web_downloading": "Sťahovanie… {percent} %",
+        "web_footer": "Beží lokálne cez yt-dlp + ffmpeg. Určené na obsah, ktorý máte právo stiahnuť.",
+        "decimal_separator": ",",
+        "err_unknown_mode": "Neznámy režim sťahovania.",
+        "err_unknown_container": "Neznámy kontajner.",
+        "err_unknown_job": "Neznáma úloha.",
+        "err_file_not_ready": "Súbor ešte nie je pripravený.",
+        "err_file_missing": "Súbor chýba.",
+    },
+}
+
+_current = DEFAULT_LANGUAGE
+
+
+def languages():
+    """Language codes in menu order, best-known name first."""
+    return list(STRINGS)
+
+
+def language_name(code):
+    return LANGUAGE_NAMES.get(code, code)
+
+
+def language():
+    return _current
+
+
+def set_language(code):
+    """Switch the app-wide language. Unknown codes fall back to English."""
+    global _current
+    _current = code if code in STRINGS else DEFAULT_LANGUAGE
+    return _current
+
+
+def normalise(code):
+    """'sk_SK.UTF-8', 'sk-SK', 'SK' -> 'sk', or None if we don't have it."""
+    if not code:
+        return None
+    base = str(code).replace("-", "_").split(".")[0].split("_")[0].lower()
+    return base if base in STRINGS else None
+
+
+def t(key, lang=None, **fields):
+    """Look up a string, falling back to English and then to the key itself."""
+    table = STRINGS.get(lang or _current, {})
+    text = table.get(key) or STRINGS[DEFAULT_LANGUAGE].get(key, key)
+    return text.format(**fields) if fields else text
+
+
+def number(value, digits=1, lang=None):
+    """Format a number with the decimal separator the language expects."""
+    text = f"{value:.{digits}f}"
+    return text.replace(".", ",") if (lang or _current) == "sk" else text
+
+
+def detect_language():
+    """Guess the language from the environment, defaulting to English."""
+    for name in ("LC_ALL", "LC_MESSAGES", "LANG", "LANGUAGE"):
+        # LANGUAGE holds a colon-separated preference list.
+        for part in (os.environ.get(name) or "").split(":"):
+            found = normalise(part)
+            if found:
+                return found
+
+    if sys.platform == "win32":
+        # Env vars are normally unset on Windows; ask for the UI language.
+        try:
+            import ctypes
+            lcid = ctypes.windll.kernel32.GetUserDefaultUILanguage()
+            if lcid & 0x3FF == 0x1B:  # LANG_SLOVAK
+                return "sk"
+        except Exception:  # noqa: BLE001 - detection must never break startup
+            pass
+
+    try:
+        found = normalise((locale.getlocale()[0] or ""))
+        if found:
+            return found
+    except (ValueError, TypeError):
+        pass
+
+    return DEFAULT_LANGUAGE
