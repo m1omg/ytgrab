@@ -86,6 +86,37 @@ if staged_ffmpeg:
     a.datas = [e for e in a.datas if not _is_spare_ffmpeg(e)]
     print("dropped %d redundant imageio_ffmpeg binaries" % dropped)
 
+# Cross-targeted macOS builds can pick up a dependency wheel compiled for the
+# host instead of the target. Optional C accelerators are not worth failing a
+# build over - drop the mismatched ones and let their pure-Python fallbacks
+# take over, rather than aborting the way PyInstaller would.
+_target = os.environ.get("YTGRAB_TARGET_ARCH")
+if sys.platform == "darwin" and _target:
+    import subprocess as _sub
+
+    def _archs(path):
+        try:
+            out = _sub.run(["lipo", "-archs", path], capture_output=True,
+                           text=True, timeout=30)
+            return out.stdout.split()
+        except Exception:
+            return []
+
+    _mismatched = []
+    for entry in list(a.binaries):
+        src = str(entry[1])
+        found = _archs(src)
+        if found and _target not in found:
+            _mismatched.append((entry, src, found))
+
+    for entry, src, found in _mismatched:
+        print("dropping %s (built for %s, need %s)"
+              % (entry[0], ",".join(found), _target))
+        a.binaries.remove(entry)
+    if _mismatched:
+        print("dropped %d binaries built for the wrong architecture"
+              % len(_mismatched))
+
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
 common = dict(
@@ -123,7 +154,7 @@ if ONEDIR:
         info_plist={
             "NSHighResolutionCapable": True,
             "LSMinimumSystemVersion": "12.0",
-            "CFBundleShortVersionString": "1.0.4",
+            "CFBundleShortVersionString": "1.0.5",
         },
     )
 else:

@@ -90,6 +90,24 @@ jobs:
             *arm64)  lipo -archs "$FF" | grep -q arm64  || { echo "ffmpeg is not arm64";  exit 1; } ;;
           esac
 
+      # pip resolves wheels for the host, so the Rosetta build would otherwise
+      # pull arm64 C extensions. universal2 wheels carry both architectures and
+      # PyInstaller can thin them to the target.
+      - name: Reinstall compiled deps as universal2 (macOS)
+        if: runner.os == 'macOS'
+        continue-on-error: true
+        run: |
+          pip install --force-reinstall --no-deps --only-binary=:all: \
+            --platform macosx_10_13_universal2 \
+            --platform macosx_10_15_universal2 \
+            --platform macosx_11_0_universal2 \
+            --target universal-deps \
+            websockets brotli pycryptodomex || echo "universal2 wheels unavailable"
+          if [ -d universal-deps ]; then
+            SITE=$(python -c "import site; print(site.getsitepackages()[0])")
+            cp -R universal-deps/* "$SITE"/ 2>/dev/null || true
+          fi
+
       - name: Build
         env:
           YTGRAB_TARGET_ARCH: ${{ matrix.target-arch || '' }}
