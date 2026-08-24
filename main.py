@@ -39,7 +39,19 @@ def selftest():
 
     missing = [e for e in ("libmp3lame", "aac", "libopus") if e not in out]
     print(f"encoders {'all present' if not missing else 'MISSING: ' + ', '.join(missing)}")
-    return 1 if missing else 0
+
+    # yt-dlp degrades quietly without these, so check them here rather than
+    # letting a download fail at the very last step.
+    absent = []
+    for label, module in (("mutagen", "mutagen"), ("pycryptodomex", "Cryptodome"),
+                          ("websockets", "websockets"), ("brotli", "brotli")):
+        try:
+            __import__(module)
+        except ImportError:
+            absent.append(label)
+    print(f"optional {'all present' if not absent else 'MISSING: ' + ', '.join(absent)}")
+
+    return 1 if (missing or absent) else 0
 
 
 def main():

@@ -1,3 +1,14 @@
 PySide6-Essentials>=6.6
 yt-dlp>=2025.1.1
 imageio-ffmpeg>=0.5
+
+# Optional yt-dlp dependencies. Not required to download, but yt-dlp degrades
+# quietly without them, so a packaged build should always carry them:
+#   mutagen   - embeds cover art in m4a/opus/flac (ffmpeg covers mp3 itself)
+#   pycryptodomex - decrypts some AES-128 HLS streams
+#   websockets    - needed by a few live/streaming extractors
+#   brotli        - handles brotli-compressed responses
+mutagen>=1.45
+pycryptodomex>=3.19
+websockets>=12.0
+brotli>=1.1

@@ -22,6 +22,15 @@ ONEDIR = sys.platform == "darwin"
 # yt-dlp loads its extractors lazily, so PyInstaller can't see them statically.
 hidden = collect_submodules("yt_dlp")
 
+# yt-dlp imports these through a helper module, so PyInstaller misses them and
+# they silently drop out of the bundle. Without mutagen, embedding cover art in
+# m4a/opus/flac fails at the end of a download.
+for _optional in ("mutagen", "Cryptodome", "websockets", "brotli"):
+    try:
+        hidden += collect_submodules(_optional)
+    except Exception:
+        print("WARNING: optional dependency %s is missing" % _optional)
+
 # Ship a static ffmpeg, named so ytgrab.core finds it beside the app.
 # The second tuple element is a destination *directory*, so the binary is first
 # copied to a staging dir under the name we want it to keep in the bundle.
@@ -114,7 +123,7 @@ if ONEDIR:
         info_plist={
             "NSHighResolutionCapable": True,
             "LSMinimumSystemVersion": "12.0",
-            "CFBundleShortVersionString": "1.0.3",
+            "CFBundleShortVersionString": "1.0.4",
         },
     )
 else:
