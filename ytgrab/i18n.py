@@ -171,7 +171,7 @@ STRINGS = {
         "best_available": "Najlepšie dostupné",
         "container_mp4": "MP4 – prehrá sa všade",
         "container_mkv": "MKV – ponechá najkvalitnejšie stopy bez zmeny",
-        "container_tip": ("YouTube ponúka 4K len vo formáte VP9/AV1, ktorý sa do MP4 nie vždy zmestí.\n"
+        "container_tip": ("YouTube ponúka 4K len v kodekoch VP9/AV1, ktoré sa do MP4 nie vždy dajú zabaliť.\n"
                           "Ak chcete najvyššiu kvalitu, vyberte MKV."),
         "stream": "Stopa:",
         "audio_best": "Najlepšia dostupná (bez prekódovania)",
