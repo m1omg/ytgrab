@@ -40,6 +40,8 @@ STRINGS = {
         "mode_audio_tip": "The audio stream exactly as YouTube stores it - no quality loss",
         "mode_mp3": "MP3",
         "mode_mp3_tip": "The audio converted to MP3 (a second lossy step)",
+        "mode_transcript": "Transcript",
+        "mode_transcript_tip": "The subtitle track as text - no video or audio is downloaded",
 
         # -- options --
         "resolution": "Resolution:",
@@ -57,6 +59,15 @@ STRINGS = {
         "bitrate_v0": "VBR V0 - best quality (~245 kbps)",
         "bitrate_cbr": "{kbps} kbps CBR",
         "embed": "Embed cover art and metadata",
+
+        # -- transcript --
+        "transcript_lang": "Language:",
+        "transcript_format": "Format:",
+        "transcript_txt": "Plain text - one flowing transcript",
+        "transcript_srt": "SRT - timed subtitles",
+        "transcript_vtt": "WebVTT - timed subtitles",
+        "transcript_auto": "{code} (automatic)",
+        "transcript_none": "This video has no transcript.",
 
         # -- destination --
         "save_to": "Save to:",
@@ -104,6 +115,7 @@ STRINGS = {
         "stage_EmbedThumbnail": "Embedding cover art",
         "stage_Metadata": "Writing metadata",
         "stage_MoveFiles": "Finishing up",
+        "stage_SubtitlesConvertor": "Converting subtitles",
 
         # -- engine errors --
         "err_bot": ("YouTube asked this machine to confirm it isn't a bot. This usually "
@@ -113,6 +125,7 @@ STRINGS = {
         "err_unsupported": "That link isn't one yt-dlp recognises.",
         "err_no_video": "No downloadable video found at that link.",
         "err_no_output": "yt-dlp finished but produced no output file.",
+        "err_no_transcript": "No transcript is available in that language.",
 
         # -- browser version --
         "web_tagline": "Download a video, or pull the audio stream straight out untouched.",
@@ -122,6 +135,10 @@ STRINGS = {
         "web_mode_video_sub": "with audio",
         "web_mode_audio_sub": "original stream",
         "web_mode_mp3_sub": "converted",
+        "web_mode_transcript": "Transcript",
+        "web_mode_transcript_sub": "subtitles as text",
+        "web_transcript_lang": "Language",
+        "web_transcript_format": "Format",
         "web_resolution": "Resolution",
         "web_container": "Container",
         "web_container_mp4": "MP4 — most compatible",
@@ -164,6 +181,8 @@ STRINGS = {
         "mode_audio_tip": "Zvuková stopa presne v tej podobe, v akej ju ukladá YouTube – bez straty kvality",
         "mode_mp3": "MP3",
         "mode_mp3_tip": "Zvuk prevedený do MP3 (ďalšia stratová konverzia)",
+        "mode_transcript": "Prepis",
+        "mode_transcript_tip": "Titulky ako text – video ani zvuk sa nesťahujú",
 
         # -- options --
         "resolution": "Rozlíšenie:",
@@ -181,6 +200,15 @@ STRINGS = {
         "bitrate_v0": "VBR V0 – najvyššia kvalita (~245 kb/s)",
         "bitrate_cbr": "{kbps} kb/s CBR",
         "embed": "Vložiť obal a metaúdaje",
+
+        # -- prepis --
+        "transcript_lang": "Jazyk:",
+        "transcript_format": "Formát:",
+        "transcript_txt": "Čistý text – súvislý prepis",
+        "transcript_srt": "SRT – titulky s časovaním",
+        "transcript_vtt": "WebVTT – titulky s časovaním",
+        "transcript_auto": "{code} (automatické)",
+        "transcript_none": "Toto video nemá prepis.",
 
         # -- destination --
         "save_to": "Uložiť do:",
@@ -228,6 +256,7 @@ STRINGS = {
         "stage_EmbedThumbnail": "Vkladanie obalu",
         "stage_Metadata": "Zapisovanie metaúdajov",
         "stage_MoveFiles": "Dokončovanie",
+        "stage_SubtitlesConvertor": "Konverzia titulkov",
 
         # -- engine errors --
         "err_bot": ("YouTube žiada od tohto počítača potvrdenie, že nie je robot. Zvyčajne to "
@@ -237,6 +266,7 @@ STRINGS = {
         "err_unsupported": "Tento odkaz yt-dlp nepozná.",
         "err_no_video": "Na tomto odkaze sa nenašlo žiadne video na stiahnutie.",
         "err_no_output": "yt-dlp skončil, ale nevytvoril žiadny výstupný súbor.",
+        "err_no_transcript": "V tomto jazyku nie je k dispozícii žiadny prepis.",
 
         # -- browser version --
         "web_tagline": "Stiahnite si video alebo z neho vytiahnite zvukovú stopu v pôvodnej podobe.",
@@ -246,6 +276,10 @@ STRINGS = {
         "web_mode_video_sub": "so zvukom",
         "web_mode_audio_sub": "pôvodná stopa",
         "web_mode_mp3_sub": "konvertované",
+        "web_mode_transcript": "Prepis",
+        "web_mode_transcript_sub": "titulky ako text",
+        "web_transcript_lang": "Jazyk",
+        "web_transcript_format": "Formát",
         "web_resolution": "Rozlíšenie",
         "web_container": "Kontajner",
         "web_container_mp4": "MP4 – najkompatibilnejší",

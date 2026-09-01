@@ -55,6 +55,15 @@ a sensible default for compatibility.
 
 Both audio modes can embed the thumbnail as cover art along with title tags.
 
+**Transcript** — saves the subtitle track instead of the media. Nothing but the
+captions is fetched, so it finishes in a second or two. Manual subtitles are
+listed first; YouTube's machine-generated ones are marked *(automatic)*.
+
+* *Plain text* flattens the captions into one flowing transcript. Timings are
+  dropped, and the repeated lines that scrolling auto-captions produce are
+  collapsed. This format needs no ffmpeg.
+* *SRT* and *WebVTT* keep the timings, for use as real subtitle files.
+
 ## Running from source
 
 ```bash

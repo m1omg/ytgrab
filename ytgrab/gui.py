@@ -22,7 +22,7 @@ from .i18n import t
 
 # yt-dlp reports postprocessor names with the "FFmpeg" prefix stripped.
 KNOWN_STAGES = ("ExtractAudio", "Merger", "VideoRemuxer", "VideoConvertor",
-                "EmbedThumbnail", "Metadata", "MoveFiles")
+                "EmbedThumbnail", "Metadata", "MoveFiles", "SubtitlesConvertor")
 
 
 def stage_key(name):
@@ -143,6 +143,7 @@ class MainWindow(QMainWindow):
         self.dl_worker = None
         self.last_file = None
         self.info = None          # last metadata read, for relabelling
+        self.transcripts = []     # subtitle tracks offered by the last read
         self.fetching = False
         # The two progress labels re-render themselves on a language switch,
         # so each one keeps the callable that produced its current text.
@@ -240,7 +241,7 @@ class MainWindow(QMainWindow):
         self.mode_group = QButtonGroup(self)
 
         self.mode_buttons = {}
-        for i, key in enumerate(("video", "audio", "mp3")):
+        for i, key in enumerate(("video", "audio", "mp3", "transcript")):
             btn = QRadioButton()
             btn.setChecked(key == "video")
             self.mode_group.addButton(btn, i)
@@ -296,6 +297,23 @@ class MainWindow(QMainWindow):
         g.addWidget(self.bitrate_combo, 0, 1)
         g.setColumnStretch(1, 1)
         self.opt_stack.addWidget(mp3)
+
+        # transcript
+        transcript = QWidget()
+        g = QGridLayout(transcript)
+        g.setContentsMargins(0, 0, 0, 0)
+        self.tlang_combo = QComboBox()
+        self.tfmt_combo = QComboBox()
+        for value in ("txt", "srt", "vtt"):
+            self.tfmt_combo.addItem("", value)
+        self.tlang_label = QLabel()
+        self.tfmt_label = QLabel()
+        g.addWidget(self.tlang_label, 0, 0)
+        g.addWidget(self.tlang_combo, 0, 1)
+        g.addWidget(self.tfmt_label, 1, 0)
+        g.addWidget(self.tfmt_combo, 1, 1)
+        g.setColumnStretch(1, 1)
+        self.opt_stack.addWidget(transcript)
 
         wrapper = QWidget()
         col = QVBoxLayout(wrapper)
@@ -379,6 +397,30 @@ class MainWindow(QMainWindow):
         for index, text in enumerate(labels):
             combo.setItemText(index, text)
 
+    def _default_transcript_index(self):
+        """Prefer the interface language, then English, then whatever is first."""
+        codes = [entry["code"] for entry in self.transcripts]
+        for wanted in (i18n.language(), "en"):
+            for index, code in enumerate(codes):
+                if code == wanted or code.split("-")[0] == wanted:
+                    return index
+        return 0
+
+    def _fill_transcript_langs(self):
+        """Rebuild the language list, keeping the current choice if it survives."""
+        previous = self.tlang_combo.currentData()
+        self.tlang_combo.clear()
+        for entry in self.transcripts:
+            label = (t("transcript_auto", code=entry["code"]) if entry["auto"]
+                     else entry["code"])
+            self.tlang_combo.addItem(label, entry["code"])
+        if not self.transcripts:
+            self.tlang_combo.addItem(t("transcript_none"), "")
+            return
+        found = self.tlang_combo.findData(previous)
+        self.tlang_combo.setCurrentIndex(
+            found if found >= 0 else self._default_transcript_index())
+
     def retranslate(self):
         """Apply the active language to every widget that shows text."""
         self.lang_menu.setTitle(t("menu_language"))
@@ -410,6 +452,13 @@ class MainWindow(QMainWindow):
                       [t("bitrate_v0")] + [t("bitrate_cbr", kbps=k)
                                            for k in ("320", "256", "192", "128")])
         self.embed_check.setText(t("embed"))
+
+        self.tlang_label.setText(t("transcript_lang"))
+        self.tfmt_label.setText(t("transcript_format"))
+        self._relabel(self.tfmt_combo,
+                      [t("transcript_txt"), t("transcript_srt"), t("transcript_vtt")])
+        # "(automatic)" is translated, so the list is rebuilt, not just relabelled.
+        self._fill_transcript_langs()
 
         self.dest_label.setText(t("save_to"))
         self.browse_btn.setText(t("change"))
@@ -448,7 +497,8 @@ class MainWindow(QMainWindow):
 
     def _sync_mode(self):
         mode = self.current_mode()
-        self.opt_stack.setCurrentIndex({"video": 0, "audio": 1, "mp3": 2}[mode])
+        self.opt_stack.setCurrentIndex(
+            {"video": 0, "audio": 1, "mp3": 2, "transcript": 3}[mode])
         self.embed_check.setVisible(mode in ("audio", "mp3"))
 
     def _on_url_changed(self):
@@ -458,6 +508,8 @@ class MainWindow(QMainWindow):
             self.info = None
             self.res_combo.clear()
             self.res_combo.addItem(t("best_available"), "best")
+            self.transcripts = []
+            self._fill_transcript_langs()
 
     def paste_and_fetch(self):
         text = QApplication.clipboard().text().strip()
@@ -505,6 +557,9 @@ class MainWindow(QMainWindow):
         for h in info["heights"]:
             self.res_combo.addItem(f"{h}p", str(h))
 
+        self.transcripts = info.get("transcripts") or []
+        self._fill_transcript_langs()
+
         self.thumb_label.clear()
         if info["thumbnail"]:
             self.thumb_worker = ThumbWorker(info["thumbnail"])
@@ -540,16 +595,24 @@ class MainWindow(QMainWindow):
         if not core.is_supported_url(url):
             QMessageBox.warning(self, t("no_link_title"), t("no_link_body"))
             return
-        if not core.ffmpeg_location():
-            QMessageBox.critical(self, t("ffmpeg_missing_title"), t("ffmpeg_missing_body"))
-            return
-
         mode = self.current_mode()
+        container = (self.tfmt_combo.currentData() if mode == "transcript"
+                     else self.container_combo.currentData())
         quality = {
             "video": lambda: self.res_combo.currentData(),
             "audio": lambda: self.acodec_combo.currentData(),
             "mp3": lambda: self.bitrate_combo.currentData(),
+            "transcript": lambda: self.tlang_combo.currentData(),
         }[mode]()
+
+        if mode == "transcript" and not quality:
+            QMessageBox.warning(self, t("download_failed_title"), t("transcript_none"))
+            return
+
+        # txt is parsed here and vtt is served as-is, so neither needs ffmpeg.
+        if (mode != "transcript" or container == "srt") and not core.ffmpeg_location():
+            QMessageBox.critical(self, t("ffmpeg_missing_title"), t("ffmpeg_missing_body"))
+            return
 
         self.download_btn.setVisible(False)
         self.cancel_btn.setVisible(True)
@@ -561,7 +624,7 @@ class MainWindow(QMainWindow):
 
         self.dl_worker = DownloadWorker(
             url, self.dest_dir, mode, quality,
-            self.container_combo.currentData(), self.embed_check.isChecked(),
+            container, self.embed_check.isChecked(),
         )
         self.dl_worker.progress.connect(self._on_progress)
         self.dl_worker.stage.connect(self._on_stage)

@@ -26,7 +26,7 @@ JOB_TTL_SECONDS = 6 * 3600
 
 # yt-dlp reports postprocessor names with the "FFmpeg" prefix stripped.
 KNOWN_STAGES = ("ExtractAudio", "Merger", "VideoRemuxer", "VideoConvertor",
-                "EmbedThumbnail", "Metadata", "MoveFiles")
+                "EmbedThumbnail", "Metadata", "MoveFiles", "SubtitlesConvertor")
 
 app = Flask(__name__)
 jobs = {}
@@ -143,7 +143,9 @@ def api_download():
         return jsonify(error=t("invalid_link", lang)), 400
     if mode not in core.MODES:
         return jsonify(error=t("err_unknown_mode", lang)), 400
-    if container not in core.CONTAINERS:
+    # In transcript mode the container field carries the subtitle format.
+    allowed = core.TRANSCRIPT_FORMATS if mode == "transcript" else core.CONTAINERS
+    if container not in allowed:
         return jsonify(error=t("err_unknown_container", lang)), 400
 
     job_id = uuid.uuid4().hex

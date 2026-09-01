@@ -60,6 +60,16 @@ vtedy, keď niečo vyžaduje priamo MP3. Najlepšie nastavenie je V0 (VBR);
 Oba zvukové režimy vedia do súboru vložiť náhľadový obrázok ako obal a k tomu
 názov a ďalšie údaje.
 
+**Prepis** — namiesto videa uloží stopu s titulkami. Nesťahuje sa nič okrem
+titulkov, takže je hotový za pár sekúnd. Najskôr sa ponúkajú ručne vytvorené
+titulky, tie automatické od YouTubu sú označené ako *(automatické)*.
+
+* *Čistý text* prevedie titulky na súvislý prepis. Časovanie sa vynechá a
+  opakované riadky, ktoré vznikajú pri rolovaní automatických titulkov, sa
+  zlúčia. Tento formát nepotrebuje ffmpeg.
+* *SRT* a *WebVTT* časovanie zachovajú, takže vzniknú plnohodnotné súbory
+  s titulkami.
+
 ## Spustenie zo zdrojového kódu
 
 ```bash

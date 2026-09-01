@@ -4,10 +4,12 @@ Everything that talks to yt-dlp lives here; the UIs only supply a request and
 receive progress callbacks.
 """
 
+import html
 import os
 import re
 import shutil
 import sys
+import textwrap
 import uuid
 from pathlib import Path
 from urllib.parse import urlparse
@@ -18,8 +20,12 @@ from yt_dlp.utils import DownloadError
 from . import i18n
 from .i18n import t
 
-MODES = ("video", "audio", "mp3")
+MODES = ("video", "audio", "mp3", "transcript")
 CONTAINERS = ("mp4", "mkv")
+# Transcript outputs. yt-dlp converts between srt/vtt/ass/lrc but has no plain
+# text target, so txt is produced here by parsing the subtitle file instead -
+# which also means txt needs no ffmpeg.
+TRANSCRIPT_FORMATS = ("txt", "srt", "vtt")
 
 # Files yt-dlp leaves beside the real output (thumbnails, partial downloads).
 _JUNK_SUFFIXES = {".part", ".ytdl", ".temp", ".jpg", ".png", ".webp", ".json", ".description"}
@@ -109,9 +115,42 @@ def clean_error(message, lang=None):
         return t("err_unsupported", lang)
     if "No downloadable video found" in message:
         return t("err_no_video", lang)
+    if "No transcript available" in message:
+        return t("err_no_transcript", lang)
     if "produced no output file" in message:
         return t("err_no_output", lang)
     return message[:600]
+
+
+_TAG_RE = re.compile(r"<[^>]*>")
+_TIMESTAMP_RE = re.compile(r"\d{1,2}:\d{2}:\d{2}[.,]\d{3}\s*-->")
+_CUE_HEADERS = ("WEBVTT", "Kind:", "Language:", "NOTE", "STYLE", "REGION")
+
+
+def subtitles_to_text(path, width=80):
+    """Flatten an srt or vtt file into readable plain text.
+
+    Auto-generated captions scroll: every cue repeats the tail of the one
+    before it, so consecutive duplicate lines are dropped. Timings are
+    discarded on purpose - srt and vtt stay available when they are wanted.
+    """
+    lines = Path(path).read_text(encoding="utf-8", errors="replace").splitlines()
+    out = []
+    for index, line in enumerate(lines):
+        line = line.strip()
+        if not line or line.startswith(_CUE_HEADERS) or _TIMESTAMP_RE.search(line):
+            continue
+        # A cue number or identifier is whatever sits just above a timestamp.
+        following = lines[index + 1].strip() if index + 1 < len(lines) else ""
+        if _TIMESTAMP_RE.search(following):
+            continue
+        # Tags go before entities, so that an escaped &lt;word&gt; survives.
+        # YouTube double-encodes apostrophes (&amp;#39;), hence unescaping twice.
+        line = html.unescape(html.unescape(_TAG_RE.sub("", line))).strip()
+        if line and (not out or out[-1] != line):
+            out.append(line)
+    text = re.sub(r"\s+", " ", " ".join(out)).strip()
+    return textwrap.fill(text, width) + "\n" if text else ""
 
 
 def base_opts():
@@ -155,6 +194,13 @@ def fetch_info(url):
         {f["acodec"].split(".")[0] for f in formats
          if f.get("acodec") not in (None, "none") and f.get("vcodec") in (None, "none")}
     )
+    # Manual tracks first: a human wrote them, so they read better than ASR.
+    manual = info.get("subtitles") or {}
+    automatic = info.get("automatic_captions") or {}
+    transcripts = ([{"code": c, "auto": False} for c in sorted(manual)]
+                   + [{"code": c, "auto": True} for c in sorted(automatic)
+                      if c not in manual])
+
     return {
         "title": info.get("title") or "",
         "uploader": info.get("uploader") or info.get("channel") or "",
@@ -163,6 +209,7 @@ def fetch_info(url):
         "heights": heights,
         "audio_codecs": audio_codecs,
         "is_live": bool(info.get("is_live")),
+        "transcripts": transcripts,
     }
 
 
@@ -171,7 +218,10 @@ def build_opts(out_dir, mode, quality, container="mp4", embed_thumbnail=True,
     """Translate a download request into yt-dlp options."""
     if mode not in MODES:
         raise ValueError("unknown mode: %r" % mode)
-    if container not in CONTAINERS:
+    if mode == "transcript":
+        if container not in TRANSCRIPT_FORMATS:
+            raise ValueError("unknown transcript format: %r" % container)
+    elif container not in CONTAINERS:
         raise ValueError("unknown container: %r" % container)
 
     opts = base_opts()
@@ -213,7 +263,7 @@ def build_opts(out_dir, mode, quality, container="mp4", embed_thumbnail=True,
             "nopostoverwrites": False,
         })
 
-    else:  # mp3
+    elif mode == "mp3":
         opts["format"] = "bestaudio/best"
         postprocessors.append({
             "key": "FFmpegExtractAudio",
@@ -222,7 +272,20 @@ def build_opts(out_dir, mode, quality, container="mp4", embed_thumbnail=True,
             "preferredquality": str(quality),
         })
 
-    postprocessors.append({"key": "FFmpegMetadata", "add_metadata": True})
+    else:  # transcript - subtitles only, no media stream is fetched
+        opts["skip_download"] = True
+        opts["writesubtitles"] = True
+        opts["writeautomaticsub"] = True
+        # A concrete language, never "all": YouTube offers automatic
+        # translations into ~200 of them and would write a file for each.
+        opts["subtitleslangs"] = [quality if quality and quality != "best" else "en"]
+        # vtt is what YouTube serves, so asking for it avoids a conversion.
+        opts["subtitlesformat"] = "vtt/srt/best"
+        if container == "srt":
+            postprocessors.append({"key": "FFmpegSubtitlesConvertor", "format": "srt"})
+
+    if mode != "transcript":
+        postprocessors.append({"key": "FFmpegMetadata", "add_metadata": True})
 
     if embed_thumbnail and mode in ("audio", "mp3"):
         opts["writethumbnail"] = True
@@ -274,7 +337,15 @@ def download(url, dest_dir, mode, quality, container="mp4", embed_thumbnail=True
 
         produced = find_output_file(work_dir)
         if produced is None:
+            if mode == "transcript":
+                raise DownloadError("No transcript available in that language.")
             raise RuntimeError("yt-dlp finished but produced no output file.")
+
+        if mode == "transcript" and container == "txt":
+            flattened = produced.with_suffix(".txt")
+            flattened.write_text(subtitles_to_text(produced), encoding="utf-8")
+            produced.unlink()
+            produced = flattened
 
         final = unique_path(dest_dir / produced.name)
         shutil.move(str(produced), str(final))

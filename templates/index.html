@@ -57,7 +57,7 @@
   .meta .t { font-weight: 600; margin-bottom: 4px; }
   .meta .m { color: var(--muted); font-size: 13px; }
 
-  .modes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .modes { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
   .mode {
     border: 1px solid var(--line); border-radius: 10px; padding: 12px;
     text-align: center; cursor: pointer; background: var(--panel-2);
@@ -120,6 +120,7 @@
       <div class="mode active" data-mode="video"><b>{{ t.web_mode_video }}</b><small>{{ t.web_mode_video_sub }}</small></div>
       <div class="mode" data-mode="audio"><b>{{ t.web_mode_audio }}</b><small>{{ t.web_mode_audio_sub }}</small></div>
       <div class="mode" data-mode="mp3"><b>{{ t.web_mode_mp3 }}</b><small>{{ t.web_mode_mp3_sub }}</small></div>
+      <div class="mode" data-mode="transcript"><b>{{ t.web_mode_transcript }}</b><small>{{ t.web_mode_transcript_sub }}</small></div>
     </div>
 
     <div id="videoOpts">
@@ -151,6 +152,19 @@
           {% for kbps in ["320", "256", "192", "128"] %}
           <option value="{{ kbps }}"{% if kbps == "192" %} selected{% endif %}>{{ t.bitrate_cbr.format(kbps=kbps) }}</option>
           {% endfor %}
+        </select>
+      </label>
+    </div>
+
+    <div id="transcriptOpts" class="hidden">
+      <label class="field">{{ t.web_transcript_lang }}
+        <select id="tlang"></select>
+      </label>
+      <label class="field">{{ t.web_transcript_format }}
+        <select id="tfmt">
+          <option value="txt">{{ t.transcript_txt }}</option>
+          <option value="srt">{{ t.transcript_srt }}</option>
+          <option value="vtt">{{ t.transcript_vtt }}</option>
         </select>
       </label>
     </div>
@@ -212,7 +226,8 @@ document.querySelectorAll(".mode").forEach(el => {
     $("videoOpts").classList.toggle("hidden", mode !== "video");
     $("audioOpts").classList.toggle("hidden", mode !== "audio");
     $("mp3Opts").classList.toggle("hidden", mode !== "mp3");
-    $("thumbRow").classList.toggle("hidden", mode === "video");
+    $("transcriptOpts").classList.toggle("hidden", mode !== "transcript");
+    $("thumbRow").classList.toggle("hidden", mode === "video" || mode === "transcript");
   };
 });
 
@@ -247,6 +262,25 @@ async function fetchInfo() {
       o.textContent = h + "p";
       res.appendChild(o);
     });
+    const tl = $("tlang");
+    tl.innerHTML = "";
+    (d.transcripts || []).forEach(s => {
+      const o = document.createElement("option");
+      o.value = s.code;
+      o.textContent = s.auto ? fill(T.transcript_auto, { code: s.code }) : s.code;
+      tl.appendChild(o);
+    });
+    if (!tl.options.length) {
+      const o = document.createElement("option");
+      o.value = "";
+      o.textContent = T.transcript_none;
+      tl.appendChild(o);
+    } else {
+      // Prefer the page language, then English, then whatever came first.
+      const want = [document.documentElement.lang, "en"]
+        .find(l => [...tl.options].some(o => o.value.split("-")[0] === l));
+      if (want) tl.value = [...tl.options].find(o => o.value.split("-")[0] === want).value;
+    }
     $("opts").classList.remove("hidden");
   } catch (e) {
     $("infoErr").textContent = e.message;
@@ -263,12 +297,14 @@ $("url").addEventListener("keydown", e => { if (e.key === "Enter") fetchInfo(); 
 $("go").onclick = async () => {
   const quality = mode === "video" ? $("res").value
                 : mode === "audio" ? $("acodec").value
+                : mode === "transcript" ? $("tlang").value
                 : $("bitrate").value;
   const body = {
     url: $("url").value.trim(),
     mode,
     quality,
-    container: $("container").value,
+    // In transcript mode this field carries the subtitle format.
+    container: mode === "transcript" ? $("tfmt").value : $("container").value,
     embed_thumbnail: $("embed").checked
   };
   $("go").disabled = true;
