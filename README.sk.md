@@ -3,8 +3,9 @@
 Malá multiplatformová aplikácia na sťahovanie videa a zvuku z YouTube,
 postavená na [yt-dlp](https://github.com/yt-dlp/yt-dlp) a ffmpeg.
 
-Beží na Linuxe, Windowse aj macOS. ffmpeg je súčasťou balíka, takže nič ďalšie
-netreba inštalovať.
+Beží na Linuxe, Windowse aj macOS. ffmpeg aj QuickJS (behové prostredie
+JavaScriptu, ktoré yt-dlp potrebuje pre YouTube) sú súčasťou balíka, takže nič
+ďalšie netreba inštalovať.
 
 *Read this in [English](README.md).*
 
@@ -82,8 +83,9 @@ Na Linuxe môžu chýbať aj runtime knižnice Qt (`libegl1`, `libxkbcommon-x11-
 a podobne); úplný zoznam nájdete v riadku s `apt-get` v súbore
 `.github/workflows/build.yml`.
 
-`python main.py --selftest` vypíše nájdené verzie a overí, že ffmpeg je
-prítomný a spustiteľný — hodí sa, keď sa zostavená aplikácia správa čudne.
+`python main.py --selftest` vypíše nájdené verzie a overí, že ffmpeg aj
+behové prostredie JavaScriptu sú prítomné a spustiteľné — hodí sa, keď sa
+zostavená aplikácia správa čudne.
 
 ## Linux: položka v ponuke aplikácií
 
@@ -106,6 +108,13 @@ skript spustite znova.
 pip install -r requirements.txt pyinstaller
 pyinstaller --noconfirm --clean ytgrab.spec
 ```
+
+Lokálne zostavenie pribalí QuickJS, ak ho nájde: buď `qjs` v premennej PATH,
+alebo pripnuté vydanie stiahnuté príkazom
+`python packaging/fetch_qjs.py linux-x86_64 qjsbin` a odovzdané ako
+`YTGRAB_QJS=qjsbin/qjs` (ciele: `linux-x86_64`, `windows-x86_64`,
+`darwin-arm64`, `darwin-x86_64`). Bez neho sťahovanie z YouTube závisí od
+programu deno alebo node nainštalovaného v počítači.
 
 Aplikáciu nemožno zostaviť pre iný systém, než na akom bežíte: `.exe` pre
 Windows treba zostaviť na Windowse a `.app` pre macOS na macOS. Workflow

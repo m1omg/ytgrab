@@ -4,3 +4,4 @@ dist/
 downloads/
 __pycache__/
 *.pyc
+qjsbin/

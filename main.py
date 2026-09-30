@@ -57,7 +57,35 @@ def selftest():
             absent.append("certifi CA bundle")
     print(f"optional {'all present' if not absent else 'MISSING: ' + ', '.join(absent)}")
 
-    return 1 if (missing or absent) else 0
+    # YouTube only serves working streams to clients that solve its JavaScript
+    # challenges, which takes yt-dlp's solver scripts and a runtime to run them.
+    js_ok = True
+    try:
+        import yt_dlp_ejs.yt.solver
+        yt_dlp_ejs.yt.solver.core()
+        yt_dlp_ejs.yt.solver.lib()
+        print(f"solver   yt-dlp-ejs {yt_dlp_ejs.version}")
+    except Exception as exc:
+        print(f"solver   MISSING ({exc})")
+        js_ok = False
+
+    qjs = core.bundled_qjs()
+    if qjs:
+        try:
+            out = subprocess.run([qjs, "-e", "console.log(6 * 7)"],
+                                 capture_output=True, text=True, timeout=30).stdout.strip()
+        except Exception as exc:
+            out = f"failed to run: {exc}"
+        print(f"js       {'QuickJS OK' if out == '42' else 'QuickJS FAILED: ' + out} ({qjs})")
+        js_ok = js_ok and out == "42"
+    else:
+        # A packaged build must carry its own; running from source may rely
+        # on a deno or node that yt-dlp finds by itself.
+        system = [name for name in ("deno", "node", "qjs", "bun") if shutil.which(name)]
+        print(f"js       no bundled QuickJS; on PATH: {', '.join(system) or 'nothing'}")
+        js_ok = js_ok and bool(system) and not getattr(sys, "frozen", False)
+
+    return 1 if (missing or absent or not js_ok) else 0
 
 
 def main():

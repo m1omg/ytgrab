@@ -3,8 +3,8 @@
 A small cross-platform desktop app for downloading YouTube video and audio,
 built on [yt-dlp](https://github.com/yt-dlp/yt-dlp) and ffmpeg.
 
-Runs on Linux, Windows and macOS. ffmpeg is bundled, so there is nothing else
-to install.
+Runs on Linux, Windows and macOS. ffmpeg and QuickJS (the JavaScript runtime
+yt-dlp needs for YouTube) are bundled, so there is nothing else to install.
 
 *Toto si prečítajte po [slovensky](README.sk.md).*
 
@@ -77,7 +77,8 @@ and friends); see the `apt-get` line in `.github/workflows/build.yml` for the
 full list.
 
 `python main.py --selftest` prints the versions it resolved and verifies that
-ffmpeg is present and runnable — useful if a build misbehaves.
+ffmpeg and the JavaScript runtime are present and runnable — useful if a build
+misbehaves.
 
 ## Linux: menu entry
 
@@ -99,6 +100,13 @@ The installed binary is a snapshot, so re-run the script after rebuilding.
 pip install -r requirements.txt pyinstaller
 pyinstaller --noconfirm --clean ytgrab.spec
 ```
+
+A local build bundles QuickJS if it can find one: either a `qjs` on your PATH,
+or the pinned release fetched with
+`python packaging/fetch_qjs.py linux-x86_64 qjsbin` and passed as
+`YTGRAB_QJS=qjsbin/qjs` (targets: `linux-x86_64`, `windows-x86_64`,
+`darwin-arm64`, `darwin-x86_64`). Without it, YouTube downloads depend on a
+deno or node installed on the machine.
 
 Binaries cannot be cross-compiled: a Windows `.exe` has to be built on Windows
 and a macOS `.app` on macOS. The GitHub Actions workflow does all four builds on

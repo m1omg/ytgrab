@@ -87,6 +87,35 @@ def has_ffmpeg():
 
 
 # --------------------------------------------------------------------------
+# JavaScript runtime
+# --------------------------------------------------------------------------
+
+def bundled_qjs():
+    """The QuickJS binary shipped inside a packaged build, or None."""
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        for name in ("qjs", "qjs.exe"):
+            candidate = Path(meipass) / name
+            if candidate.is_file():
+                return _make_executable(str(candidate))
+    return None
+
+
+def js_runtimes():
+    """JavaScript runtimes yt-dlp may use to solve YouTube's challenges.
+
+    YouTube hides its stream URLs behind JavaScript challenges. Without a
+    runtime to solve them yt-dlp is left with one fallback client, a mode it
+    calls deprecated and in which formats go missing. yt-dlp picks the fastest
+    runtime present - deno, then node, then QuickJS, then bun - so a system
+    deno or node wins, and the QuickJS inside packaged builds covers every
+    machine that has neither.
+    """
+    qjs = bundled_qjs()
+    return {"deno": {}, "node": {}, "quickjs": {"path": qjs} if qjs else {}, "bun": {}}
+
+
+# --------------------------------------------------------------------------
 # helpers
 # --------------------------------------------------------------------------
 
@@ -164,6 +193,7 @@ def base_opts():
         "retries": 5,
         "fragment_retries": 5,
         "concurrent_fragment_downloads": 4,
+        "js_runtimes": js_runtimes(),
     }
     location = ffmpeg_location()
     if location:
@@ -317,6 +347,55 @@ def unique_path(path):
         n += 1
 
 
+# Tried in turn when YouTube refuses a stream with HTTP 403: first player
+# clients other than yt-dlp's defaults, then the same over IPv4. Both a client
+# YouTube has stopped honouring and a flagged IPv6 address fail this way.
+_FALLBACK_CLIENTS = ["tv", "web_embedded", "web_safari"]
+_FORBIDDEN_RETRIES = (
+    {"extractor_args": {"youtube": {"player_client": _FALLBACK_CLIENTS}}},
+    {"extractor_args": {"youtube": {"player_client": _FALLBACK_CLIENTS}},
+     "source_address": "0.0.0.0"},
+)
+
+
+def _is_forbidden(exc):
+    return "HTTP Error 403" in str(exc)
+
+
+def _clear_dir(path):
+    for entry in Path(path).iterdir():
+        if entry.is_dir():
+            shutil.rmtree(entry, ignore_errors=True)
+        else:
+            entry.unlink(missing_ok=True)
+
+
+def _download_with_fallbacks(url, opts, work_dir):
+    try:
+        with YoutubeDL(opts) as ydl:
+            ydl.extract_info(url, download=True)
+        return
+    except DownloadError as exc:
+        if not _is_forbidden(exc):
+            raise
+        refused = exc
+
+    for overrides in _FORBIDDEN_RETRIES:
+        # A partial file from the refused stream must not be resumed with
+        # bytes from a different one.
+        _clear_dir(work_dir)
+        try:
+            with YoutubeDL({**opts, **overrides}) as ydl:
+                ydl.extract_info(url, download=True)
+            return
+        except DownloadError as exc:
+            if not _is_forbidden(exc):
+                break
+    # The first refusal is the one worth reporting; a fallback failing for an
+    # unrelated reason (no IPv4 route, say) would only hide it.
+    raise refused
+
+
 def download(url, dest_dir, mode, quality, container="mp4", embed_thumbnail=True,
              progress_hook=None, postprocessor_hook=None):
     """Download into dest_dir and return the finished file's Path.
@@ -332,8 +411,7 @@ def download(url, dest_dir, mode, quality, container="mp4", embed_thumbnail=True
     try:
         opts = build_opts(work_dir, mode, quality, container, embed_thumbnail,
                           progress_hook, postprocessor_hook)
-        with YoutubeDL(opts) as ydl:
-            ydl.extract_info(url, download=True)
+        _download_with_fallbacks(url, opts, work_dir)
 
         produced = find_output_file(work_dir)
         if produced is None:

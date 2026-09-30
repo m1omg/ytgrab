@@ -26,9 +26,11 @@ jobs:
           - os: ubuntu-latest
             name: linux-x86_64
             artifact: ytgrab-linux-x86_64
+            qjs: linux-x86_64
           - os: windows-latest
             name: windows-x86_64
             artifact: ytgrab-windows-x86_64.exe
+            qjs: windows-x86_64
           - os: macos-latest
             name: macos-arm64
             artifact: ytgrab-macos-arm64.zip
@@ -36,6 +38,7 @@ jobs:
             # Qt 6.10+ needs macOS 15; 6.9.3 still supports macOS 12.
             pyside: PySide6-Essentials==6.9.3
             ffmpeg-tag: macosx_11_0_arm64
+            qjs: darwin-arm64
           # Intel build runs on an Apple Silicon runner via Rosetta, because
           # the macos-13 Intel runners are being retired. Rosetta translates
           # x86_64 -> arm64, so an arm64 host can run the x64 toolchain.
@@ -46,6 +49,7 @@ jobs:
             target-arch: x86_64
             pyside: PySide6-Essentials==6.9.3
             ffmpeg-tag: macosx_10_9_x86_64
+            qjs: darwin-x86_64
             optional: true      # never block a release on this leg
 
     steps:
@@ -112,6 +116,16 @@ jobs:
             SITE=$(python -c "import site; print(site.getsitepackages()[0])")
             cp -R universal-deps/* "$SITE"/ 2>/dev/null || true
           fi
+
+      # yt-dlp needs a JavaScript runtime to solve YouTube's challenges, and
+      # QuickJS is small enough to ship in every build. As with ffmpeg, the
+      # target picks the binary, not the host.
+      - name: Fetch QuickJS for the target platform
+        shell: bash
+        run: |
+          QJS=$(python packaging/fetch_qjs.py "${{ matrix.qjs }}" qjsbin)
+          echo "YTGRAB_QJS=$QJS" >> "$GITHUB_ENV"
+          echo "bundling: $QJS"
 
       - name: Build
         env:
