@@ -8,7 +8,10 @@ imageio-ffmpeg>=0.5
 #   pycryptodomex - decrypts some AES-128 HLS streams
 #   websockets    - needed by a few live/streaming extractors
 #   brotli        - handles brotli-compressed responses
+#   certifi       - CA certificates for HTTPS; a frozen build can't find the
+#                   system store on distros laid out unlike the build machine
 mutagen>=1.45
 pycryptodomex>=3.19
 websockets>=12.0
 brotli>=1.1
+certifi>=2024.2.2
