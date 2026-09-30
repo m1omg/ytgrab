@@ -14,7 +14,7 @@ import os
 import shutil as _shutil
 import sys
 
-from PyInstaller.utils.hooks import collect_submodules
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 block_cipher = None
 ONEDIR = sys.platform == "darwin"
@@ -24,12 +24,21 @@ hidden = collect_submodules("yt_dlp")
 
 # yt-dlp imports these through a helper module, so PyInstaller misses them and
 # they silently drop out of the bundle. Without mutagen, embedding cover art in
-# m4a/opus/flac fails at the end of a download.
-for _optional in ("mutagen", "Cryptodome", "websockets", "brotli"):
+# m4a/opus/flac fails at the end of a download. Without certifi, every HTTPS
+# request fails certificate verification on distros whose CA store isn't where
+# the build machine's OpenSSL expects it (Fedora, Arch, openSUSE...).
+for _optional in ("mutagen", "Cryptodome", "websockets", "brotli", "certifi"):
     try:
         hidden += collect_submodules(_optional)
     except Exception:
         print("WARNING: optional dependency %s is missing" % _optional)
+
+# certifi's CA bundle is a data file, not code.
+datas = []
+try:
+    datas += collect_data_files("certifi")
+except Exception:
+    print("WARNING: certifi CA bundle not found")
 
 # Ship a static ffmpeg, named so ytgrab.core finds it beside the app.
 # The second tuple element is a destination *directory*, so the binary is first
@@ -58,7 +67,7 @@ a = Analysis(
     ["main.py"],
     pathex=[],
     binaries=binaries,
-    datas=[],
+    datas=datas,
     hiddenimports=hidden,
     hookspath=[],
     runtime_hooks=[],
@@ -154,7 +163,7 @@ if ONEDIR:
         info_plist={
             "NSHighResolutionCapable": True,
             "LSMinimumSystemVersion": "12.0",
-            "CFBundleShortVersionString": "1.0.8",
+            "CFBundleShortVersionString": "1.0.9",
         },
     )
 else:

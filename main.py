@@ -44,11 +44,17 @@ def selftest():
     # letting a download fail at the very last step.
     absent = []
     for label, module in (("mutagen", "mutagen"), ("pycryptodomex", "Cryptodome"),
-                          ("websockets", "websockets"), ("brotli", "brotli")):
+                          ("websockets", "websockets"), ("brotli", "brotli"),
+                          ("certifi", "certifi")):
         try:
             __import__(module)
         except ImportError:
             absent.append(label)
+    # Without its CA bundle certifi imports fine but every HTTPS request fails.
+    if "certifi" not in absent:
+        import certifi
+        if not Path(certifi.where()).is_file():
+            absent.append("certifi CA bundle")
     print(f"optional {'all present' if not absent else 'MISSING: ' + ', '.join(absent)}")
 
     return 1 if (missing or absent) else 0
