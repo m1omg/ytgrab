@@ -26,19 +26,22 @@ hidden = collect_submodules("yt_dlp")
 # they silently drop out of the bundle. Without mutagen, embedding cover art in
 # m4a/opus/flac fails at the end of a download. Without certifi, every HTTPS
 # request fails certificate verification on distros whose CA store isn't where
-# the build machine's OpenSSL expects it (Fedora, Arch, openSUSE...).
-for _optional in ("mutagen", "Cryptodome", "websockets", "brotli", "certifi"):
+# the build machine's OpenSSL expects it (Fedora, Arch, openSUSE...). Without
+# yt_dlp_ejs there is no script to solve YouTube's challenges with.
+for _optional in ("mutagen", "Cryptodome", "websockets", "brotli", "certifi",
+                  "yt_dlp_ejs"):
     try:
         hidden += collect_submodules(_optional)
     except Exception:
         print("WARNING: optional dependency %s is missing" % _optional)
 
-# certifi's CA bundle is a data file, not code.
+# certifi's CA bundle and the challenge solver scripts are data files, not code.
 datas = []
-try:
-    datas += collect_data_files("certifi")
-except Exception:
-    print("WARNING: certifi CA bundle not found")
+for _package in ("certifi", "yt_dlp_ejs"):
+    try:
+        datas += collect_data_files(_package)
+    except Exception:
+        print("WARNING: no data files collected for %s" % _package)
 
 # Ship a static ffmpeg, named so ytgrab.core finds it beside the app.
 # The second tuple element is a destination *directory*, so the binary is first
@@ -62,6 +65,23 @@ try:
     print("bundling ffmpeg from %s" % _source)
 except Exception as exc:
     print("WARNING: no bundled ffmpeg (%s); the app will need a system one." % exc)
+
+# Ship QuickJS so yt-dlp can solve YouTube's JavaScript challenges on machines
+# without deno or node. CI fetches the binary for the target platform with
+# packaging/fetch_qjs.py and passes it in YTGRAB_QJS; a local build falls back
+# to a qjs on PATH.
+_wanted = "qjs.exe" if sys.platform == "win32" else "qjs"
+_source = os.environ.get("YTGRAB_QJS") or _shutil.which("qjs")
+if _source:
+    _stage = os.path.join(os.path.abspath("build"), "qjs-stage")
+    os.makedirs(_stage, exist_ok=True)
+    _staged = os.path.join(_stage, _wanted)
+    _shutil.copy2(_source, _staged)
+    os.chmod(_staged, 0o755)
+    binaries.append((_staged, "."))
+    print("bundling QuickJS from %s" % _source)
+else:
+    print("WARNING: no QuickJS to bundle; YouTube will need a system deno or node.")
 
 a = Analysis(
     ["main.py"],
@@ -163,7 +183,7 @@ if ONEDIR:
         info_plist={
             "NSHighResolutionCapable": True,
             "LSMinimumSystemVersion": "12.0",
-            "CFBundleShortVersionString": "1.0.9",
+            "CFBundleShortVersionString": "1.0.10",
         },
     )
 else:

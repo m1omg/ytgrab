@@ -1,5 +1,7 @@
 PySide6-Essentials>=6.6
-yt-dlp>=2025.1.1
+# [default] brings yt-dlp-ejs, the scripts that solve YouTube's JavaScript
+# challenges, pinned to the exact version this yt-dlp expects.
+yt-dlp[default]>=2025.11.12
 imageio-ffmpeg>=0.5
 
 # Optional yt-dlp dependencies. Not required to download, but yt-dlp degrades
