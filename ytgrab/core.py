@@ -10,11 +10,13 @@ import re
 import shutil
 import sys
 import textwrap
+import time
 import uuid
 from pathlib import Path
 from urllib.parse import urlparse
 
 from yt_dlp import YoutubeDL
+from yt_dlp.cookies import CookieLoadError
 from yt_dlp.utils import DownloadError
 
 from . import i18n
@@ -26,6 +28,20 @@ CONTAINERS = ("mp4", "mkv")
 # text target, so txt is produced here by parsing the subtitle file instead -
 # which also means txt needs no ffmpeg.
 TRANSCRIPT_FORMATS = ("txt", "srt", "vtt")
+
+# Browsers a YouTube login can be borrowed from, keyed by yt-dlp's names.
+# Safari keeps its cookies somewhere yt-dlp can only read on macOS.
+COOKIE_BROWSERS = {
+    "firefox": "Firefox",
+    "chrome": "Chrome",
+    "chromium": "Chromium",
+    "brave": "Brave",
+    "edge": "Edge",
+    "opera": "Opera",
+    "vivaldi": "Vivaldi",
+}
+if sys.platform == "darwin":
+    COOKIE_BROWSERS["safari"] = "Safari"
 
 # Files yt-dlp leaves beside the real output (thumbnails, partial downloads).
 _JUNK_SUFFIXES = {".part", ".ytdl", ".temp", ".jpg", ".png", ".webp", ".json", ".description"}
@@ -128,15 +144,33 @@ def is_supported_url(url):
     return parsed.scheme in ("http", "https") and bool(parsed.netloc)
 
 
-def clean_error(message, lang=None):
+class LoginReadError(DownloadError):
+    """The YouTube login could not be read from the chosen browser."""
+
+    def __init__(self, browser, reason):
+        super().__init__(f"Could not read the YouTube login from {browser}: {reason}")
+        self.browser, self.reason = browser, reason
+
+
+def _plain(message):
+    message = re.sub(r"\x1b\[[0-9;]*m", "", str(message))
+    return message.replace("ERROR: ", "").strip()
+
+
+def clean_error(message, lang=None, login=None):
     """Turn a yt-dlp exception into something worth showing a user.
 
     The engine itself raises in English so the strings stay greppable against
     yt-dlp's own output; the translation happens here, on the way to the UI.
+    `login` is the browser the YouTube login was borrowed from, if any.
     """
-    message = re.sub(r"\x1b\[[0-9;]*m", "", str(message))
-    message = message.replace("ERROR: ", "").strip()
-    if "Sign in to confirm" in message or "not a bot" in message:
+    if isinstance(message, LoginReadError):
+        return t("err_cookies", lang, browser=COOKIE_BROWSERS.get(message.browser, message.browser),
+                 reason=message.reason[:300])
+    message = _plain(message)
+    if _BOT_CHECK.search(message):
+        if login:
+            return t("err_bot_login", lang, browser=COOKIE_BROWSERS.get(login, login))
         return t("err_bot", lang)
     if "Video unavailable" in message:
         return t("err_unavailable", lang)
@@ -182,7 +216,7 @@ def subtitles_to_text(path, width=80):
     return textwrap.fill(text, width) + "\n" if text else ""
 
 
-def base_opts():
+def base_opts(cookies_browser=None):
     opts = {
         "quiet": True,
         "no_warnings": True,
@@ -198,15 +232,100 @@ def base_opts():
     location = ffmpeg_location()
     if location:
         opts["ffmpeg_location"] = location
+    if cookies_browser:
+        # Requests go out signed in, which is what YouTube's bot check asks for.
+        opts["cookiesfrombrowser"] = (cookies_browser,)
     return opts
 
 
-def fetch_info(url):
+# --------------------------------------------------------------------------
+# running yt-dlp
+# --------------------------------------------------------------------------
+
+# YouTube's bot check and a refused stream (HTTP 403) both depend on which
+# player client asked; these clients often get through when the defaults are
+# stopped. The last attempt adds IPv4, as a flagged IPv6 address ends the same
+# way.
+_FALLBACK_CLIENTS = ["tv", "web_embedded", "web_safari"]
+_FALLBACK = {"extractor_args": {"youtube": {"player_client": _FALLBACK_CLIENTS}}}
+_FALLBACK_IPV4 = {**_FALLBACK, "source_address": "0.0.0.0"}
+
+# Once the fallback clients have got past a bot check, they go first for a
+# while. The download that follows a bot-checked preview would otherwise hit
+# the same check and pay for a wasted extraction before falling back again.
+_PREFER_FALLBACK_SECONDS = 30 * 60
+_prefer_fallback_until = 0.0
+
+_BOT_CHECK = re.compile(r"Sign in to confirm|not a bot")
+
+
+def _is_forbidden(exc):
+    return "HTTP Error 403" in str(exc)
+
+
+def _is_bot_check(exc):
+    return bool(_BOT_CHECK.search(str(exc)))
+
+
+def _attempts():
+    if time.monotonic() < _prefer_fallback_until:
+        return (_FALLBACK, {}, _FALLBACK_IPV4)
+    return ({}, _FALLBACK, _FALLBACK_IPV4)
+
+
+def _clear_dir(path):
+    for entry in Path(path).iterdir():
+        if entry.is_dir():
+            shutil.rmtree(entry, ignore_errors=True)
+        else:
+            entry.unlink(missing_ok=True)
+
+
+def _extract(url, opts, download, work_dir=None):
+    """Run yt-dlp, trying other routes when YouTube stops it.
+
+    Retries only on a bot check or a refused stream; anything else, a cancel
+    included, ends it at once. If every route fails, the defaults' error is
+    the one reported - a fallback failing for an unrelated reason (no IPv4
+    route, say) would only hide it.
+    """
+    global _prefer_fallback_until
+    first = default_error = None
+    for overrides in _attempts():
+        if first is not None and work_dir is not None:
+            # A partial file from the refused stream must not be resumed with
+            # bytes from a different one.
+            _clear_dir(work_dir)
+        try:
+            with YoutubeDL({**opts, **overrides}) as ydl:
+                info = ydl.extract_info(url, download=download)
+        except DownloadError as exc:
+            if isinstance((exc.exc_info or (None, None))[1], CookieLoadError):
+                raise LoginReadError(opts["cookiesfrombrowser"][0], _plain(exc)) from exc
+            if not overrides:
+                default_error = exc
+            # A preferred fallback failing says nothing about the defaults, so
+            # they still get their turn - some videos only play through them.
+            preferred = overrides and first is None
+            if not (_is_forbidden(exc) or _is_bot_check(exc) or preferred):
+                if first is None:
+                    raise
+                break
+            first = first or exc
+            continue
+        if not overrides:
+            _prefer_fallback_until = 0.0
+        elif first is not None and _is_bot_check(first):
+            _prefer_fallback_until = time.monotonic() + _PREFER_FALLBACK_SECONDS
+        return info
+    raise default_error or first
+
+
+def fetch_info(url, cookies_browser=None):
     """Read metadata without downloading. Raises DownloadError on failure."""
-    opts = base_opts()
+    opts = base_opts(cookies_browser)
     opts["skip_download"] = True
-    with YoutubeDL(opts) as ydl:
-        info = ydl.extract_info(url, download=False)
+    info = _extract(url, opts, download=False)
 
     if info.get("_type") == "playlist":
         entries = [e for e in (info.get("entries") or []) if e]
@@ -244,7 +363,7 @@ def fetch_info(url):
 
 
 def build_opts(out_dir, mode, quality, container="mp4", embed_thumbnail=True,
-               progress_hook=None, postprocessor_hook=None):
+               progress_hook=None, postprocessor_hook=None, cookies_browser=None):
     """Translate a download request into yt-dlp options."""
     if mode not in MODES:
         raise ValueError("unknown mode: %r" % mode)
@@ -254,7 +373,7 @@ def build_opts(out_dir, mode, quality, container="mp4", embed_thumbnail=True,
     elif container not in CONTAINERS:
         raise ValueError("unknown container: %r" % container)
 
-    opts = base_opts()
+    opts = base_opts(cookies_browser)
     opts["outtmpl"] = str(Path(out_dir) / "%(title)s.%(ext)s")
     if progress_hook:
         opts["progress_hooks"] = [progress_hook]
@@ -347,57 +466,8 @@ def unique_path(path):
         n += 1
 
 
-# Tried in turn when YouTube refuses a stream with HTTP 403: first player
-# clients other than yt-dlp's defaults, then the same over IPv4. Both a client
-# YouTube has stopped honouring and a flagged IPv6 address fail this way.
-_FALLBACK_CLIENTS = ["tv", "web_embedded", "web_safari"]
-_FORBIDDEN_RETRIES = (
-    {"extractor_args": {"youtube": {"player_client": _FALLBACK_CLIENTS}}},
-    {"extractor_args": {"youtube": {"player_client": _FALLBACK_CLIENTS}},
-     "source_address": "0.0.0.0"},
-)
-
-
-def _is_forbidden(exc):
-    return "HTTP Error 403" in str(exc)
-
-
-def _clear_dir(path):
-    for entry in Path(path).iterdir():
-        if entry.is_dir():
-            shutil.rmtree(entry, ignore_errors=True)
-        else:
-            entry.unlink(missing_ok=True)
-
-
-def _download_with_fallbacks(url, opts, work_dir):
-    try:
-        with YoutubeDL(opts) as ydl:
-            ydl.extract_info(url, download=True)
-        return
-    except DownloadError as exc:
-        if not _is_forbidden(exc):
-            raise
-        refused = exc
-
-    for overrides in _FORBIDDEN_RETRIES:
-        # A partial file from the refused stream must not be resumed with
-        # bytes from a different one.
-        _clear_dir(work_dir)
-        try:
-            with YoutubeDL({**opts, **overrides}) as ydl:
-                ydl.extract_info(url, download=True)
-            return
-        except DownloadError as exc:
-            if not _is_forbidden(exc):
-                break
-    # The first refusal is the one worth reporting; a fallback failing for an
-    # unrelated reason (no IPv4 route, say) would only hide it.
-    raise refused
-
-
 def download(url, dest_dir, mode, quality, container="mp4", embed_thumbnail=True,
-             progress_hook=None, postprocessor_hook=None):
+             progress_hook=None, postprocessor_hook=None, cookies_browser=None):
     """Download into dest_dir and return the finished file's Path.
 
     Work happens in a scratch directory inside dest_dir so the final move is a
@@ -410,8 +480,8 @@ def download(url, dest_dir, mode, quality, container="mp4", embed_thumbnail=True
 
     try:
         opts = build_opts(work_dir, mode, quality, container, embed_thumbnail,
-                          progress_hook, postprocessor_hook)
-        _download_with_fallbacks(url, opts, work_dir)
+                          progress_hook, postprocessor_hook, cookies_browser)
+        _extract(url, opts, download=True, work_dir=work_dir)
 
         produced = find_output_file(work_dir)
         if produced is None:

@@ -12,8 +12,11 @@ imageio-ffmpeg>=0.5
 #   brotli        - handles brotli-compressed responses
 #   certifi       - CA certificates for HTTPS; a frozen build can't find the
 #                   system store on distros laid out unlike the build machine
+#   secretstorage - unlocks the cookie key of Chrome-family browsers from the
+#                   desktop keyring, for "Use YouTube login from browser" (Linux)
 mutagen>=1.45
 pycryptodomex>=3.19
 websockets>=12.0
 brotli>=1.1
 certifi>=2024.2.2
+secretstorage>=3.3; sys_platform == "linux"

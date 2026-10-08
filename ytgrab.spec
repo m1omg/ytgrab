@@ -28,8 +28,12 @@ hidden = collect_submodules("yt_dlp")
 # request fails certificate verification on distros whose CA store isn't where
 # the build machine's OpenSSL expects it (Fedora, Arch, openSUSE...). Without
 # yt_dlp_ejs there is no script to solve YouTube's challenges with.
-for _optional in ("mutagen", "Cryptodome", "websockets", "brotli", "certifi",
-                  "yt_dlp_ejs"):
+# On Linux, secretstorage (and jeepney under it) reads the keyring that holds
+# the cookie key of Chrome-family browsers, for borrowing a YouTube login.
+_optionals = ["mutagen", "Cryptodome", "websockets", "brotli", "certifi", "yt_dlp_ejs"]
+if sys.platform.startswith("linux"):
+    _optionals += ["secretstorage", "jeepney"]
+for _optional in _optionals:
     try:
         hidden += collect_submodules(_optional)
     except Exception:
@@ -183,7 +187,7 @@ if ONEDIR:
         info_plist={
             "NSHighResolutionCapable": True,
             "LSMinimumSystemVersion": "12.0",
-            "CFBundleShortVersionString": "1.0.10",
+            "CFBundleShortVersionString": "1.0.11",
         },
     )
 else:

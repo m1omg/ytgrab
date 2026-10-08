@@ -43,9 +43,13 @@ def selftest():
     # yt-dlp degrades quietly without these, so check them here rather than
     # letting a download fail at the very last step.
     absent = []
-    for label, module in (("mutagen", "mutagen"), ("pycryptodomex", "Cryptodome"),
-                          ("websockets", "websockets"), ("brotli", "brotli"),
-                          ("certifi", "certifi")):
+    optional = [("mutagen", "mutagen"), ("pycryptodomex", "Cryptodome"),
+                ("websockets", "websockets"), ("brotli", "brotli"),
+                ("certifi", "certifi")]
+    # Reads Chrome-family cookie keys from the keyring, for the browser login.
+    if sys.platform.startswith("linux"):
+        optional.append(("secretstorage", "secretstorage"))
+    for label, module in optional:
         try:
             __import__(module)
         except ImportError:

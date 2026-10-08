@@ -20,6 +20,18 @@ STRINGS = {
     "en": {
         # -- window chrome --
         "menu_language": "&Language",
+        "menu_options": "&Options",
+        "login_menu": "Use YouTube login from browser",
+        "login_off": "Off",
+        "login_note_title": "Using your YouTube login",
+        "login_note_body": ("ytgrab will read your YouTube cookies from {browser} on this "
+                            "computer and send them only to YouTube, so its requests go out "
+                            "signed in - which is what YouTube's bot check asks for.\n\n"
+                            "You need to be signed in to YouTube in {browser}. YouTube can "
+                            "temporarily restrict an account that downloads a lot, so a "
+                            "secondary account is the safer choice.\n\n"
+                            "On Windows, Chrome, Edge and other Chromium-based browsers usually "
+                            "can't be read; Firefox can."),
 
         # -- link row --
         "link": "Link:",
@@ -118,9 +130,15 @@ STRINGS = {
         "stage_SubtitlesConvertor": "Converting subtitles",
 
         # -- engine errors --
-        "err_bot": ("YouTube asked this machine to confirm it isn't a bot. This usually "
-                    "means the connection or IP is rate limited; trying again later, or "
-                    "from a different network, normally clears it."),
+        "err_bot": ("YouTube asked this machine to confirm it isn't a bot, and stopped the "
+                    "other ways ytgrab tried as well. Waiting a while or switching networks "
+                    "usually clears it. If it keeps happening, sign in to YouTube in your "
+                    "browser and pick that browser under Options → Use YouTube login from "
+                    "browser."),
+        "err_bot_login": ("YouTube still asked to confirm this isn't a bot, even with the login "
+                          "from {browser}. Check that you're signed in to YouTube in {browser}, "
+                          "or try again later."),
+        "err_cookies": "Couldn't read the YouTube login from {browser}: {reason}",
         "err_unavailable": "That video is unavailable - it may be private, removed or region locked.",
         "err_unsupported": "That link isn't one yt-dlp recognises.",
         "err_no_video": "No downloadable video found at that link.",
@@ -161,6 +179,19 @@ STRINGS = {
     "sk": {
         # -- window chrome --
         "menu_language": "&Jazyk",
+        "menu_options": "&Možnosti",
+        "login_menu": "Použiť prihlásenie do YouTube z prehliadača",
+        "login_off": "Vypnuté",
+        "login_note_title": "Použitie vášho prihlásenia do YouTube",
+        "login_note_body": ("ytgrab načíta vaše cookies pre YouTube z prehliadača {browser} "
+                            "v tomto počítači a pošle ich výhradne službe YouTube, takže jeho "
+                            "požiadavky pôjdu ako od prihláseného používateľa – presne to "
+                            "kontrola robotov vyžaduje.\n\n"
+                            "V prehliadači {browser} musíte byť prihlásení do YouTube. YouTube "
+                            "môže dočasne obmedziť účet, ktorý veľa sťahuje, preto je "
+                            "bezpečnejší vedľajší účet.\n\n"
+                            "Vo Windowse sa z Chrome, Edge a iných prehliadačov založených na "
+                            "Chromiu cookies väčšinou načítať nedajú; z Firefoxu áno."),
 
         # -- link row --
         "link": "Odkaz:",
@@ -259,9 +290,15 @@ STRINGS = {
         "stage_SubtitlesConvertor": "Konverzia titulkov",
 
         # -- engine errors --
-        "err_bot": ("YouTube žiada od tohto počítača potvrdenie, že nie je robot. Zvyčajne to "
-                    "znamená, že pripojenie alebo IP adresa naráža na limit; väčšinou pomôže "
-                    "skúsiť to neskôr alebo z inej siete."),
+        "err_bot": ("YouTube žiada od tohto počítača potvrdenie, že nie je robot, a zastavil "
+                    "aj ostatné spôsoby, ktoré ytgrab skúsil. Zvyčajne pomôže chvíľu počkať "
+                    "alebo prejsť na inú sieť. Ak sa to opakuje, prihláste sa do YouTube "
+                    "v prehliadači a vyberte ho v ponuke Možnosti → Použiť prihlásenie do "
+                    "YouTube z prehliadača."),
+        "err_bot_login": ("YouTube aj s prihlásením z prehliadača {browser} žiada potvrdenie, "
+                          "že nejde o robota. Skontrolujte, či ste v prehliadači {browser} "
+                          "prihlásení do YouTube, alebo to skúste neskôr."),
+        "err_cookies": "Prihlásenie do YouTube sa z prehliadača {browser} nepodarilo načítať: {reason}",
         "err_unavailable": "Toto video nie je dostupné – môže byť súkromné, odstránené alebo blokované vo vašej krajine.",
         "err_unsupported": "Tento odkaz yt-dlp nepozná.",
         "err_no_video": "Na tomto odkaze sa nenašlo žiadne video na stiahnutie.",

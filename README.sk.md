@@ -71,6 +71,20 @@ titulky, tie automatické od YouTubu sú označené ako *(automatické)*.
 * *SRT* a *WebVTT* časovanie zachovajú, takže vzniknú plnohodnotné súbory
   s titulkami.
 
+## „Potvrďte, že nie ste robot“
+
+YouTube niekedy zastaví pripojenie, ktorému nedôveruje, a žiada prihlásenie.
+Nie je to captcha, ktorú by sa dalo vyriešiť: ytgrab to v tichosti skúsi znova
+cez iných klientov YouTube, ktorí väčšinou prejdú, a chybu ukáže, až keď
+zastaví aj tých.
+
+Ak sa to opakuje, prihláste sa do YouTube v prehliadači a vyberte ho v ponuke
+**Možnosti → Použiť prihlásenie do YouTube z prehliadača**. ytgrab potom z neho
+v tomto počítači načíta vaše cookies pre YouTube a pošle ich výhradne službe
+YouTube. YouTube môže dočasne obmedziť účet, ktorý veľa sťahuje, preto je
+bezpečnejší vedľajší účet. Vo Windowse sa z prehliadačov rodiny Chrome cookies
+väčšinou načítať nedajú; z Firefoxu áno.
+
 ## Spustenie zo zdrojového kódu
 
 ```bash
