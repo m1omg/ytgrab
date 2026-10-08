@@ -42,15 +42,16 @@ class InfoWorker(QThread):
     finished_ok = Signal(dict)
     failed = Signal(str)
 
-    def __init__(self, url):
+    def __init__(self, url, cookies_browser=None):
         super().__init__()
         self.url = url
+        self.cookies_browser = cookies_browser
 
     def run(self):
         try:
-            self.finished_ok.emit(core.fetch_info(self.url))
+            self.finished_ok.emit(core.fetch_info(self.url, self.cookies_browser))
         except Exception as exc:  # noqa: BLE001
-            self.failed.emit(core.clean_error(exc))
+            self.failed.emit(core.clean_error(exc, login=self.cookies_browser))
 
 
 class ThumbWorker(QThread):
@@ -76,11 +77,12 @@ class DownloadWorker(QThread):
     failed = Signal(str)
     cancelled = Signal()
 
-    def __init__(self, url, dest, mode, quality, container, embed):
+    def __init__(self, url, dest, mode, quality, container, embed, cookies_browser=None):
         super().__init__()
         self.url, self.dest = url, dest
         self.mode, self.quality = mode, quality
         self.container, self.embed = container, embed
+        self.cookies_browser = cookies_browser
         self._cancel = False
 
     def cancel(self):
@@ -117,6 +119,7 @@ class DownloadWorker(QThread):
                 self.container, self.embed,
                 progress_hook=self._on_progress,
                 postprocessor_hook=self._on_postprocess,
+                cookies_browser=self.cookies_browser,
             )
             self.finished_ok.emit(str(path))
         except Cancelled:
@@ -125,7 +128,7 @@ class DownloadWorker(QThread):
             if self._cancel:
                 self.cancelled.emit()
             else:
-                self.failed.emit(core.clean_error(exc))
+                self.failed.emit(core.clean_error(exc, login=self.cookies_browser))
 
 
 # --------------------------------------------------------------------------
@@ -145,6 +148,9 @@ class MainWindow(QMainWindow):
         self.info = None          # last metadata read, for relabelling
         self.transcripts = []     # subtitle tracks offered by the last read
         self.fetching = False
+        # Browser to borrow the YouTube login from, or None for no login.
+        saved = QSettings("ytgrab", "ytgrab").value("cookies_browser")
+        self.cookies_browser = saved if saved in core.COOKIE_BROWSERS else None
         # The two progress labels re-render themselves on a language switch,
         # so each one keeps the callable that produced its current text.
         self._state_text = None
@@ -184,6 +190,20 @@ class MainWindow(QMainWindow):
             group.addAction(action)
             self.lang_menu.addAction(action)
             self.lang_actions[code] = action
+
+        self.options_menu = self.menuBar().addMenu("")
+        self.login_menu = self.options_menu.addMenu("")
+        login_group = QActionGroup(self)
+        login_group.setExclusive(True)
+        self.login_actions = {}
+        for key, name in [(None, "")] + list(core.COOKIE_BROWSERS.items()):
+            action = QAction(name, self)  # "Off" is labelled in retranslate()
+            action.setCheckable(True)
+            action.setChecked(key == self.cookies_browser)
+            action.triggered.connect(lambda _checked=False, k=key: self.set_login(k))
+            login_group.addAction(action)
+            self.login_menu.addAction(action)
+            self.login_actions[key] = action
 
     def _build_url_row(self):
         box = QWidget()
@@ -391,6 +411,19 @@ class MainWindow(QMainWindow):
         QSettings("ytgrab", "ytgrab").setValue("language", code)
         self.retranslate()
 
+    def set_login(self, browser):
+        if browser == self.cookies_browser:
+            return
+        self.cookies_browser = browser
+        settings = QSettings("ytgrab", "ytgrab")
+        settings.setValue("cookies_browser", browser or "")
+        # Explain once what borrowing a login means, the first time it is used.
+        if browser and not settings.value("login_note_shown", False, type=bool):
+            settings.setValue("login_note_shown", True)
+            QMessageBox.information(
+                self, t("login_note_title"),
+                t("login_note_body", browser=core.COOKIE_BROWSERS[browser]))
+
     @staticmethod
     def _relabel(combo, labels):
         """Retitle combo items in place, keeping the current selection."""
@@ -426,6 +459,9 @@ class MainWindow(QMainWindow):
         self.lang_menu.setTitle(t("menu_language"))
         for code, action in self.lang_actions.items():
             action.setChecked(code == i18n.language())
+        self.options_menu.setTitle(t("menu_options"))
+        self.login_menu.setTitle(t("login_menu"))
+        self.login_actions[None].setText(t("login_off"))
 
         self.link_label.setText(t("link"))
         self.url_edit.setPlaceholderText(t("url_placeholder"))
@@ -530,7 +566,7 @@ class MainWindow(QMainWindow):
         self.fetch_btn.setText(t("fetching"))
         self.statusBar().showMessage(t("reading_details"))
 
-        self.info_worker = InfoWorker(url)
+        self.info_worker = InfoWorker(url, self.cookies_browser)
         self.info_worker.finished_ok.connect(self._on_info)
         self.info_worker.failed.connect(self._on_info_failed)
         self.info_worker.finished.connect(self._reset_fetch_btn)
@@ -625,6 +661,7 @@ class MainWindow(QMainWindow):
         self.dl_worker = DownloadWorker(
             url, self.dest_dir, mode, quality,
             container, self.embed_check.isChecked(),
+            self.cookies_browser,
         )
         self.dl_worker.progress.connect(self._on_progress)
         self.dl_worker.stage.connect(self._on_stage)

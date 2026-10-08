@@ -64,6 +64,20 @@ listed first; YouTube's machine-generated ones are marked *(automatic)*.
   collapsed. This format needs no ffmpeg.
 * *SRT* and *WebVTT* keep the timings, for use as real subtitle files.
 
+## "Confirm you're not a bot"
+
+YouTube sometimes stops a connection it doesn't trust and asks it to sign in.
+There is no captcha to solve: ytgrab answers by quietly retrying through other
+YouTube clients, which usually get through, and only shows an error when those
+are stopped too.
+
+If that keeps happening, sign in to YouTube in your browser and pick that
+browser under **Options → Use YouTube login from browser**. ytgrab then reads
+your YouTube cookies from it on this computer and sends them only to YouTube.
+YouTube can temporarily restrict an account that downloads a lot, so a secondary
+account is the safer choice. On Windows, Chrome-family browsers usually can't be
+read; Firefox can.
+
 ## Running from source
 
 ```bash
