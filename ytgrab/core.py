@@ -69,7 +69,14 @@ def ffmpeg_location():
     by the imageio-ffmpeg wheel, so a packaged app never asks the user to
     install anything. Returns a directory or a single binary path, both of
     which yt-dlp accepts, or None if nothing is available.
+
+    YTGRAB_FFMPEG_BIN names a binary that wins over all of these; the Android app
+    uses it to hand over the ffmpeg it ships.
     """
+    override = os.environ.get("YTGRAB_FFMPEG_BIN")
+    if override and Path(override).is_file():
+        return override
+
     system = shutil.which("ffmpeg")
     if system:
         return str(Path(system).parent)
@@ -107,7 +114,13 @@ def has_ffmpeg():
 # --------------------------------------------------------------------------
 
 def bundled_qjs():
-    """The QuickJS binary shipped inside a packaged build, or None."""
+    """The QuickJS binary shipped inside a packaged build, or None.
+
+    YTGRAB_QJS_BIN names one directly, which is how the Android app passes its own.
+    """
+    override = os.environ.get("YTGRAB_QJS_BIN")
+    if override and Path(override).is_file():
+        return override
     meipass = getattr(sys, "_MEIPASS", None)
     if meipass:
         for name in ("qjs", "qjs.exe"):

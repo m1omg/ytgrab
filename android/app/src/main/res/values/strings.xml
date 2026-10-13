@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name" translatable="false">ytgrab</string>
+
+    <!-- link row -->
+    <string name="link">Video link</string>
+    <string name="clear">Clear link</string>
+    <string name="paste">Paste</string>
+    <string name="fetch">Fetch</string>
+    <string name="fetching">Reading…</string>
+    <string name="clipboard_empty">The clipboard has no link in it.</string>
+
+    <!-- info -->
+    <string name="live">LIVE</string>
+    <string name="thumbnail">Video thumbnail</string>
+
+    <!-- modes -->
+    <string name="mode_title">What do you want?</string>
+    <string name="mode_video">Video</string>
+    <string name="mode_video_tip">Video and audio together, muxed without re-encoding</string>
+    <string name="mode_audio">Audio (original)</string>
+    <string name="mode_audio_tip">The audio stream exactly as YouTube stores it - no quality loss</string>
+    <string name="mode_mp3">MP3</string>
+    <string name="mode_mp3_tip">The audio converted to MP3 (a second lossy step)</string>
+    <string name="mode_transcript">Transcript</string>
+    <string name="mode_transcript_tip">The subtitle track as text - no video or audio is downloaded</string>
+
+    <!-- options -->
+    <string name="resolution">Resolution</string>
+    <string name="container">Container</string>
+    <string name="best_available">Best available</string>
+    <string name="container_mp4">MP4 - plays everywhere</string>
+    <string name="container_mkv">MKV - keeps the highest-quality streams as-is</string>
+    <string name="container_tip">YouTube serves 4K only as VP9/AV1, which MP4 can\'t always hold. Choose MKV if you want maximum quality.</string>
+    <string name="stream">Stream</string>
+    <string name="audio_best">Best available (no re-encoding)</string>
+    <string name="audio_opus">Prefer Opus (.opus)</string>
+    <string name="audio_m4a">Prefer AAC (.m4a)</string>
+    <string name="bitrate">Bitrate</string>
+    <string name="bitrate_v0">VBR V0 - best quality (~245 kbps)</string>
+    <string name="bitrate_cbr">%1$s kbps CBR</string>
+    <string name="embed">Embed cover art and metadata</string>
+    <string name="transcript_lang">Language</string>
+    <string name="transcript_format">Format</string>
+    <string name="transcript_txt">Plain text - one flowing transcript</string>
+    <string name="transcript_srt">SRT - timed subtitles</string>
+    <string name="transcript_vtt">WebVTT - timed subtitles</string>
+    <string name="transcript_auto">%1$s (automatic)</string>
+    <string name="transcript_none">This video has no transcript.</string>
+    <string name="transcript_fetch_first">Fetch the video first to see which transcripts it has.</string>
+
+    <!-- actions and progress -->
+    <string name="download">Download</string>
+    <string name="cancel">Cancel</string>
+    <string name="open">Open</string>
+    <string name="share">Share</string>
+    <string name="starting">Starting…</string>
+    <string name="cancelling">Cancelling…</string>
+    <string name="saving">Saving to Downloads…</string>
+    <string name="saved_to">Saved to %1$s</string>
+    <string name="cancelled">Cancelled</string>
+    <string name="download_failed">Download failed</string>
+    <string name="busy">A download is already running.</string>
+    <string name="no_app">No app on this device can open this file.</string>
+    <string name="storage_permission">ytgrab needs permission to save into your Downloads folder.</string>
+
+    <!-- notifications -->
+    <string name="channel_downloads">Downloads</string>
+    <string name="notif_saved">Saved</string>
+</resources>

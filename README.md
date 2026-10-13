@@ -1,10 +1,11 @@
 # ytgrab
 
-A small cross-platform desktop app for downloading YouTube video and audio,
-built on [yt-dlp](https://github.com/yt-dlp/yt-dlp) and ffmpeg.
+A small cross-platform app for downloading YouTube video and audio, built on
+[yt-dlp](https://github.com/yt-dlp/yt-dlp) and ffmpeg.
 
-Runs on Linux, Windows and macOS. ffmpeg and QuickJS (the JavaScript runtime
-yt-dlp needs for YouTube) are bundled, so there is nothing else to install.
+Runs on Linux, Windows, macOS and Android (7.0 and newer). ffmpeg and QuickJS
+(the JavaScript runtime yt-dlp needs for YouTube) are bundled, so there is
+nothing else to install.
 
 *Toto si prečítajte po [slovensky](README.sk.md).*
 
@@ -18,8 +19,16 @@ Grab a build from the [Releases](../../releases) page:
 | Windows | `ytgrab-windows-x86_64.exe` |
 | macOS (Apple Silicon) | `ytgrab-macos-arm64.zip` |
 | macOS (Intel) | `ytgrab-macos-x86_64.zip` |
+| Android (most phones) | `ytgrab-android-arm64.apk` |
+| Android (older 32-bit phones) | `ytgrab-android-arm32.apk` |
+| Android (not sure, Chromebooks) | `ytgrab-android-universal.apk` |
 
 On Linux, mark it executable first: `chmod +x ytgrab-linux-x86_64`.
+
+On Android, open the downloaded APK and allow your browser or file manager to
+install apps when asked. Newer versions install straight over older ones.
+Every Android 7.0+ phone runs the universal APK; the arm64 one is the same app
+at less than half the size.
 
 The macOS and Windows builds are **unsigned**, because signing certificates
 cost money. The OS will warn you on first launch: on macOS right-click the app
@@ -71,8 +80,8 @@ There is no captcha to solve: ytgrab answers by quietly retrying through other
 YouTube clients, which usually get through, and only shows an error when those
 are stopped too.
 
-If that keeps happening, sign in to YouTube in your browser and pick that
-browser under **Options → Use YouTube login from browser**. ytgrab then reads
+If that keeps happening on a computer, sign in to YouTube in your browser and
+pick that browser under **Options → Use YouTube login from browser**. ytgrab then reads
 your YouTube cookies from it on this computer and sends them only to YouTube.
 YouTube can temporarily restrict an account that downloads a lot, so a secondary
 account is the safer choice. On Windows, Chrome-family browsers usually can't be
@@ -93,6 +102,24 @@ full list.
 `python main.py --selftest` prints the versions it resolved and verifies that
 ffmpeg and the JavaScript runtime are present and runnable — useful if a build
 misbehaves.
+
+## Android
+
+The Android app does what the desktop one does - the same modes, options and
+download engine - with a phone-shaped screen:
+
+* **Share** a video from the YouTube app (or a browser) and pick ytgrab; the
+  link is filled in and read straight away.
+* Downloads keep running in the background, with progress and a *Cancel*
+  button in the notification.
+* Finished files land in **Download/ytgrab**, ready for any player, file
+  manager or the *Share* button.
+* It follows the phone's language (English or Slovak), and on Android 13+ the
+  language can be set for ytgrab alone in system settings.
+
+Reading the first video after the app starts takes a few seconds longer than
+on a computer: the phone solves YouTube's JavaScript challenge itself, and
+older phones are slower at it.
 
 ## Linux: menu entry
 
@@ -123,9 +150,29 @@ or the pinned release fetched with
 deno or node installed on the machine.
 
 Binaries cannot be cross-compiled: a Windows `.exe` has to be built on Windows
-and a macOS `.app` on macOS. The GitHub Actions workflow does all four builds on
+and a macOS `.app` on macOS. The GitHub Actions workflow does all the builds on
 GitHub's runners — push a tag like `v1.0.0` to produce a release, or trigger it
 manually from the Actions tab.
+
+### Android
+
+`android/` is a Gradle project (Kotlin, Jetpack Compose) that runs the same
+`ytgrab/core.py` through [Chaquopy](https://chaquo.com/chaquopy/). It needs
+Android's ffmpeg and QuickJS for each phone architecture, built with the NDK:
+
+```bash
+export ANDROID_NDK_HOME=/path/to/ndk   # r29
+for abi in arm64-v8a armeabi-v7a x86 x86_64; do
+  packaging/android/build_natives.sh "$abi" "android/natives/$abi"
+done
+cd android && ./gradlew assembleRelease
+```
+
+Release builds are signed with the key in two repository secrets, so every
+version installs over the last: `ANDROID_KEYSTORE_BASE64` (the keystore,
+base64-encoded) and `ANDROID_KEYSTORE_PASSWORD`. Without them the Android leg
+of the workflow fails and the release goes out with the desktop builds only.
+Keep a copy of the keystore: a phone only accepts updates signed with it.
 
 ## Optional: browser version
 
