@@ -291,8 +291,19 @@ jobs:
           printf '%s' "$KEYSTORE_BASE64" | tr -d ' \t\r\n' | base64 -d > "$RUNNER_TEMP/ytgrab.keystore" \
             || { echo "::error::ANDROID_KEYSTORE_BASE64 is not valid base64 - paste the whole long line from the signing file again."; exit 1; }
           PW=$(printf '%s' "$KEYSTORE_PASSWORD" | tr -d ' \t\r\n')
-          keytool -list -keystore "$RUNNER_TEMP/ytgrab.keystore" -storepass "$PW" -alias ytgrab > /dev/null 2>&1 \
-            || { echo "::error::The two signing secrets don't fit together - check that ANDROID_KEYSTORE_PASSWORD matches the signing file and that ANDROID_KEYSTORE_BASE64 is the complete long line."; exit 1; }
+          # keytool says which half is wrong without ever echoing the password.
+          if ! out=$(keytool -list -keystore "$RUNNER_TEMP/ytgrab.keystore" -storepass "$PW" -alias ytgrab 2>&1); then
+            case "$out" in
+              *"password was incorrect"*)
+                why="ANDROID_KEYSTORE_PASSWORD is not the password for this key - set it to the short value on the first Secret: line of the signing file." ;;
+              *EOFException*)
+                why="ANDROID_KEYSTORE_BASE64 is cut short - paste the whole long block from the signing file again." ;;
+              *)
+                why="ANDROID_KEYSTORE_BASE64 does not hold the key from the signing file - paste the long block from it again." ;;
+            esac
+            echo "::error::$why"
+            exit 1
+          fi
           echo "YTGRAB_KEYSTORE=$RUNNER_TEMP/ytgrab.keystore" >> "$GITHUB_ENV"
 
       - name: Build the APKs
