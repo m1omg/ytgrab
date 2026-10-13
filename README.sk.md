@@ -3,9 +3,9 @@
 Malá multiplatformová aplikácia na sťahovanie videa a zvuku z YouTube,
 postavená na [yt-dlp](https://github.com/yt-dlp/yt-dlp) a ffmpeg.
 
-Beží na Linuxe, Windowse aj macOS. ffmpeg aj QuickJS (behové prostredie
-JavaScriptu, ktoré yt-dlp potrebuje pre YouTube) sú súčasťou balíka, takže nič
-ďalšie netreba inštalovať.
+Beží na Linuxe, Windowse, macOS aj Androide (7.0 a novšom). ffmpeg aj QuickJS
+(behové prostredie JavaScriptu, ktoré yt-dlp potrebuje pre YouTube) sú
+súčasťou balíka, takže nič ďalšie netreba inštalovať.
 
 *Read this in [English](README.md).*
 
@@ -19,8 +19,17 @@ Zostavenú aplikáciu nájdete na stránke [Releases](../../releases):
 | Windows | `ytgrab-windows-x86_64.exe` |
 | macOS (Apple Silicon) | `ytgrab-macos-arm64.zip` |
 | macOS (Intel) | `ytgrab-macos-x86_64.zip` |
+| Android (väčšina telefónov) | `ytgrab-android-arm64.apk` |
+| Android (staršie 32-bitové telefóny) | `ytgrab-android-arm32.apk` |
+| Android (neviete, Chromebooky) | `ytgrab-android-universal.apk` |
 
 Na Linuxe súbor najprv označte ako spustiteľný: `chmod +x ytgrab-linux-x86_64`.
+
+Na Androide otvorte stiahnutý súbor APK a keď sa systém spýta, povoľte
+prehliadaču alebo správcovi súborov inštalovať aplikácie. Novšie verzie sa
+nainštalujú priamo cez staršie. Univerzálny APK spustí každý telefón
+s Androidom 7.0+; verzia arm64 je tá istá aplikácia s menej než polovičnou
+veľkosťou.
 
 Zostavenia pre macOS a Windows **nie sú digitálne podpísané**, pretože
 certifikáty stoja peniaze. Systém vás pri prvom spustení upozorní: na macOS
@@ -78,7 +87,8 @@ Nie je to captcha, ktorú by sa dalo vyriešiť: ytgrab to v tichosti skúsi zno
 cez iných klientov YouTube, ktorí väčšinou prejdú, a chybu ukáže, až keď
 zastaví aj tých.
 
-Ak sa to opakuje, prihláste sa do YouTube v prehliadači a vyberte ho v ponuke
+Ak sa to na počítači opakuje, prihláste sa do YouTube v prehliadači a vyberte
+ho v ponuke
 **Možnosti → Použiť prihlásenie do YouTube z prehliadača**. ytgrab potom z neho
 v tomto počítači načíta vaše cookies pre YouTube a pošle ich výhradne službe
 YouTube. YouTube môže dočasne obmedziť účet, ktorý veľa sťahuje, preto je
@@ -100,6 +110,24 @@ a podobne); úplný zoznam nájdete v riadku s `apt-get` v súbore
 `python main.py --selftest` vypíše nájdené verzie a overí, že ffmpeg aj
 behové prostredie JavaScriptu sú prítomné a spustiteľné — hodí sa, keď sa
 zostavená aplikácia správa čudne.
+
+## Android
+
+Aplikácia pre Android robí to isté ako tá pre počítač – rovnaké režimy,
+možnosti aj sťahovací engine – len s obrazovkou prispôsobenou telefónu:
+
+* V aplikácii YouTube (alebo v prehliadači) video **zdieľajte** a vyberte
+  ytgrab; odkaz sa vyplní a hneď načíta.
+* Sťahovanie beží ďalej aj na pozadí, s priebehom a tlačidlom *Zrušiť*
+  v upozornení.
+* Hotové súbory sa uložia do priečinka **Download/ytgrab**, odkiaľ ich otvorí
+  ktorýkoľvek prehrávač, správca súborov či tlačidlo *Zdieľať*.
+* Riadi sa jazykom telefónu (angličtina alebo slovenčina) a na Androide 13+
+  sa dá jazyk pre ytgrab nastaviť samostatne v nastaveniach systému.
+
+Načítanie prvého videa po spustení aplikácie trvá o pár sekúnd dlhšie než na
+počítači: telefón rieši JavaScriptovú úlohu YouTube sám a staršie telefóny sú
+pri tom pomalšie.
 
 ## Linux: položka v ponuke aplikácií
 
@@ -132,9 +160,30 @@ programu deno alebo node nainštalovaného v počítači.
 
 Aplikáciu nemožno zostaviť pre iný systém, než na akom bežíte: `.exe` pre
 Windows treba zostaviť na Windowse a `.app` pre macOS na macOS. Workflow
-GitHub Actions urobí všetky štyri zostavenia na serveroch GitHubu — vydanie
+GitHub Actions urobí všetky zostavenia na serveroch GitHubu — vydanie
 vytvoríte pushnutím tagu ako `v1.0.0`, prípadne workflow spustíte ručne v karte
 Actions.
+
+### Android
+
+`android/` je projekt pre Gradle (Kotlin, Jetpack Compose), ktorý cez
+[Chaquopy](https://chaquo.com/chaquopy/) spúšťa ten istý `ytgrab/core.py`.
+Potrebuje ffmpeg a QuickJS pre Android pre každú architektúru telefónov,
+zostavené pomocou NDK:
+
+```bash
+export ANDROID_NDK_HOME=/cesta/k/ndk   # r29
+for abi in arm64-v8a armeabi-v7a x86 x86_64; do
+  packaging/android/build_natives.sh "$abi" "android/natives/$abi"
+done
+cd android && ./gradlew assembleRelease
+```
+
+Vydania sú podpísané kľúčom z dvoch tajomstiev (secrets) repozitára, aby sa
+každá verzia nainštalovala cez predchádzajúcu: `ANDROID_KEYSTORE_BASE64`
+(úložisko kľúčov v base64) a `ANDROID_KEYSTORE_PASSWORD`. Bez nich zlyhá časť
+workflowu pre Android a vydanie vyjde len so zostaveniami pre počítač.
+Úložisko kľúčov si odložte: telefón prijme len aktualizácie podpísané ním.
 
 ## Voliteľne: verzia pre prehliadač
 

@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- link row -->
+    <string name="link">Odkaz na video</string>
+    <string name="clear">Vymazať odkaz</string>
+    <string name="paste">Prilepiť</string>
+    <string name="fetch">Načítať</string>
+    <string name="fetching">Načítava sa…</string>
+    <string name="clipboard_empty">Schránka neobsahuje žiadny odkaz.</string>
+
+    <!-- info -->
+    <string name="live">NAŽIVO</string>
+    <string name="thumbnail">Náhľad videa</string>
+
+    <!-- modes -->
+    <string name="mode_title">Čo chcete stiahnuť?</string>
+    <string name="mode_video">Video</string>
+    <string name="mode_video_tip">Video aj zvuk v jednom súbore, spojené bez opätovného kódovania</string>
+    <string name="mode_audio">Zvuk (pôvodný)</string>
+    <string name="mode_audio_tip">Zvuková stopa presne v tej podobe, v akej ju ukladá YouTube – bez straty kvality</string>
+    <string name="mode_mp3">MP3</string>
+    <string name="mode_mp3_tip">Zvuk prevedený do MP3 (ďalšia stratová konverzia)</string>
+    <string name="mode_transcript">Prepis</string>
+    <string name="mode_transcript_tip">Titulky ako text – video ani zvuk sa nesťahujú</string>
+
+    <!-- options -->
+    <string name="resolution">Rozlíšenie</string>
+    <string name="container">Kontajner</string>
+    <string name="best_available">Najlepšie dostupné</string>
+    <string name="container_mp4">MP4 – prehrá sa všade</string>
+    <string name="container_mkv">MKV – ponechá najkvalitnejšie stopy bez zmeny</string>
+    <string name="container_tip">YouTube ponúka 4K len v kodekoch VP9/AV1, ktoré sa do MP4 nie vždy dajú zabaliť. Ak chcete najvyššiu kvalitu, vyberte MKV.</string>
+    <string name="stream">Stopa</string>
+    <string name="audio_best">Najlepšia dostupná (bez prekódovania)</string>
+    <string name="audio_opus">Uprednostniť Opus (.opus)</string>
+    <string name="audio_m4a">Uprednostniť AAC (.m4a)</string>
+    <string name="bitrate">Dátový tok</string>
+    <string name="bitrate_v0">VBR V0 – najvyššia kvalita (~245 kb/s)</string>
+    <string name="bitrate_cbr">%1$s kb/s CBR</string>
+    <string name="embed">Vložiť obal a metaúdaje</string>
+    <string name="transcript_lang">Jazyk</string>
+    <string name="transcript_format">Formát</string>
+    <string name="transcript_txt">Čistý text – súvislý prepis</string>
+    <string name="transcript_srt">SRT – titulky s časovaním</string>
+    <string name="transcript_vtt">WebVTT – titulky s časovaním</string>
+    <string name="transcript_auto">%1$s (automatické)</string>
+    <string name="transcript_none">Toto video nemá prepis.</string>
+    <string name="transcript_fetch_first">Najprv video načítajte, aby bolo vidieť, aké prepisy má.</string>
+
+    <!-- actions and progress -->
+    <string name="download">Stiahnuť</string>
+    <string name="cancel">Zrušiť</string>
+    <string name="open">Otvoriť</string>
+    <string name="share">Zdieľať</string>
+    <string name="starting">Spúšťa sa…</string>
+    <string name="cancelling">Ruší sa…</string>
+    <string name="saving">Ukladá sa do priečinka Stiahnuté…</string>
+    <string name="saved_to">Uložené do %1$s</string>
+    <string name="cancelled">Zrušené</string>
+    <string name="download_failed">Sťahovanie zlyhalo</string>
+    <string name="busy">Sťahovanie už prebieha.</string>
+    <string name="no_app">V tomto zariadení nie je aplikácia, ktorá by tento súbor otvorila.</string>
+    <string name="storage_permission">ytgrab potrebuje povolenie ukladať do priečinka Stiahnuté.</string>
+
+    <!-- notifications -->
+    <string name="channel_downloads">Sťahovanie</string>
+    <string name="notif_saved">Uložené</string>
+</resources>

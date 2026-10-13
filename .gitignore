@@ -5,3 +5,9 @@ downloads/
 __pycache__/
 *.pyc
 qjsbin/
+android/natives/
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+.kotlin/
