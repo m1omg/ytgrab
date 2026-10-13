@@ -243,10 +243,11 @@ jobs:
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/29.0.14206865" >> "$GITHUB_ENV"
 
       # ffmpeg takes minutes per ABI; the script pins every source, so its
-      # hash says exactly when the helpers need rebuilding.
-      - name: Cache ffmpeg and QuickJS
+      # hash says exactly when the helpers need rebuilding. They are saved as
+      # soon as they are built, so a later step failing doesn't throw them away.
+      - name: Restore ffmpeg and QuickJS
         id: natives
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: android/natives
           key: android-natives-${{ hashFiles('packaging/android/build_natives.sh') }}
@@ -257,6 +258,13 @@ jobs:
           for abi in arm64-v8a armeabi-v7a x86 x86_64; do
             packaging/android/build_natives.sh "$abi" "android/natives/$abi"
           done
+
+      - name: Save ffmpeg and QuickJS
+        if: steps.natives.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: android/natives
+          key: android-natives-${{ hashFiles('packaging/android/build_natives.sh') }}
 
       # The x86_64 helpers are static, so they run on the runner itself.
       - name: Smoke test the helpers
@@ -271,8 +279,11 @@ jobs:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
-          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$KEYSTORE_PASSWORD" ]; then
-            echo "::error::Add the ANDROID_KEYSTORE_BASE64 and ANDROID_KEYSTORE_PASSWORD repository secrets to sign the Android app (see README)."
+          missing=""
+          [ -n "$KEYSTORE_BASE64" ] || missing="$missing ANDROID_KEYSTORE_BASE64"
+          [ -n "$KEYSTORE_PASSWORD" ] || missing="$missing ANDROID_KEYSTORE_PASSWORD"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repository secret(s):$missing - add them under Settings > Secrets and variables > Actions to sign the Android app (see README)."
             exit 1
           fi
           # Pasting a 5,600-character secret can bring line breaks or spaces
