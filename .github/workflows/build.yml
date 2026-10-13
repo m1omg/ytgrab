@@ -275,7 +275,13 @@ jobs:
             echo "::error::Add the ANDROID_KEYSTORE_BASE64 and ANDROID_KEYSTORE_PASSWORD repository secrets to sign the Android app (see README)."
             exit 1
           fi
-          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/ytgrab.keystore"
+          # Pasting a 5,600-character secret can bring line breaks or spaces
+          # along; base64 never contains either, so they are dropped.
+          printf '%s' "$KEYSTORE_BASE64" | tr -d ' \t\r\n' | base64 -d > "$RUNNER_TEMP/ytgrab.keystore" \
+            || { echo "::error::ANDROID_KEYSTORE_BASE64 is not valid base64 - paste the whole long line from the signing file again."; exit 1; }
+          PW=$(printf '%s' "$KEYSTORE_PASSWORD" | tr -d ' \t\r\n')
+          keytool -list -keystore "$RUNNER_TEMP/ytgrab.keystore" -storepass "$PW" -alias ytgrab > /dev/null 2>&1 \
+            || { echo "::error::The two signing secrets don't fit together - check that ANDROID_KEYSTORE_PASSWORD matches the signing file and that ANDROID_KEYSTORE_BASE64 is the complete long line."; exit 1; }
           echo "YTGRAB_KEYSTORE=$RUNNER_TEMP/ytgrab.keystore" >> "$GITHUB_ENV"
 
       - name: Build the APKs

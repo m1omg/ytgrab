@@ -48,9 +48,11 @@ android {
         if (keystore != null) {
             create("release") {
                 storeFile = file(keystore)
-                storePassword = System.getenv("YTGRAB_KEYSTORE_PASSWORD")
+                // A pasted secret can carry a stray newline; the password has none.
+                val password = System.getenv("YTGRAB_KEYSTORE_PASSWORD")?.trim()
+                storePassword = password
                 keyAlias = "ytgrab"
-                keyPassword = System.getenv("YTGRAB_KEYSTORE_PASSWORD")
+                keyPassword = password
             }
         }
     }
