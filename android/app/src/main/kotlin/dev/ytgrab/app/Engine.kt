@@ -62,6 +62,7 @@ object Engine {
         val result = engine.callAttr(
             "download", request.url, destDir.absolutePath, request.mode, request.quality,
             request.container, request.embed, listener,
+            request.part?.start ?: -1, request.part?.end ?: -1,
         )
         JSONObject(result.toString())
     }

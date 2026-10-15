@@ -80,6 +80,23 @@ titulky, tie automatické od YouTubu sú označené ako *(automatické)*.
 * *SRT* a *WebVTT* časovanie zachovajú, takže vzniknú plnohodnotné súbory
   s titulkami.
 
+## Len časť
+
+Zaškrtnite **Len časť** (v Androide prepínač *Len časť*) a zadajte, kde časť
+začína a končí, ako minúty:sekundy – napríklad **Od** `16:15` **Do** `16:45`.
+Pri dlhých videách aj hodiny:minúty:sekundy (`1:02:03`) a namiesto dvojbodky
+poslúži aj bodka či čiarka (`16.15`), čo sa hodí na číselnej klávesnici
+telefónu. Prázdne *Od* znamená od začiatku, prázdne *Do* až do konca.
+
+Stiahne sa len táto časť, nie celé video, a názov súboru hovorí, ktorá časť to
+je: `… (16m15s-16m45s).mp3`. Zvuk a video v MP4 začnú presne tam, kde ste
+chceli. MKV vie začať video len na kľúčovom snímku, takže časť v MKV môže začať
+o chvíľu (zvyčajne o sekundu-dve) skôr.
+
+Ak ffmpeg nedokáže časť stiahnuť sám – niektoré servery to odmietnu – ytgrab
+stiahne celé video a časť z neho vystrihne, takže to funguje aj tak, len
+pomalšie.
+
 ## „Potvrďte, že nie ste robot“
 
 YouTube niekedy zastaví pripojenie, ktorému nedôveruje, a žiada prihlásenie.

@@ -267,9 +267,11 @@ jobs:
           key: android-natives-${{ hashFiles('packaging/android/build_natives.sh') }}
 
       # The x86_64 helpers are static, so they run on the runner itself.
+      # ffmpeg needs https to fetch just the part of a video asked for.
       - name: Smoke test the helpers
         run: |
           android/natives/x86_64/libffmpeg.so -hide_banner -encoders | grep -q libmp3lame
+          android/natives/x86_64/libffmpeg.so -hide_banner -protocols | grep -qw https
           test "$(android/natives/x86_64/libqjs.so -e 'console.log(6 * 7)')" = 42
 
       # Android only installs an update signed with the same key as the app

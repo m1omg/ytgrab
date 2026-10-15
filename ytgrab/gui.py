@@ -22,7 +22,7 @@ from .i18n import t
 
 # yt-dlp reports postprocessor names with the "FFmpeg" prefix stripped.
 KNOWN_STAGES = ("ExtractAudio", "Merger", "VideoRemuxer", "VideoConvertor",
-                "EmbedThumbnail", "Metadata", "MoveFiles", "SubtitlesConvertor")
+                "EmbedThumbnail", "Metadata", "MoveFiles", "SubtitlesConvertor", "Cut")
 
 
 def stage_key(name):
@@ -77,12 +77,14 @@ class DownloadWorker(QThread):
     failed = Signal(str)
     cancelled = Signal()
 
-    def __init__(self, url, dest, mode, quality, container, embed, cookies_browser=None):
+    def __init__(self, url, dest, mode, quality, container, embed, cookies_browser=None,
+                 section=None):
         super().__init__()
         self.url, self.dest = url, dest
         self.mode, self.quality = mode, quality
         self.container, self.embed = container, embed
         self.cookies_browser = cookies_browser
+        self.section = section
         self._cancel = False
 
     def cancel(self):
@@ -120,6 +122,7 @@ class DownloadWorker(QThread):
                 progress_hook=self._on_progress,
                 postprocessor_hook=self._on_postprocess,
                 cookies_browser=self.cookies_browser,
+                section=self.section,
             )
             self.finished_ok.emit(str(path))
         except Cancelled:
@@ -342,7 +345,43 @@ class MainWindow(QMainWindow):
         self.embed_check = QCheckBox()
         self.embed_check.setChecked(True)
         col.addWidget(self.embed_check)
+        col.addWidget(self._build_part_row())
         return wrapper
+
+    def _build_part_row(self):
+        """'Only a part' with its From and To times, and what they come to."""
+        self.part_box = QWidget()
+        col = QVBoxLayout(self.part_box)
+        col.setContentsMargins(0, 0, 0, 0)
+        col.setSpacing(4)
+
+        row = QHBoxLayout()
+        self.part_check = QCheckBox()
+        self.part_check.toggled.connect(self._sync_part)
+        self.part_from_label = QLabel()
+        self.part_to_label = QLabel()
+        self.part_from = QLineEdit()
+        self.part_to = QLineEdit()
+        for label, edit in ((self.part_from_label, self.part_from),
+                            (self.part_to_label, self.part_to)):
+            edit.setMaximumWidth(90)
+            edit.textChanged.connect(self._sync_part)
+            label.setBuddy(edit)
+        self.part_from.setPlaceholderText(core.format_time(0))
+        row.addWidget(self.part_check)
+        row.addSpacing(12)
+        row.addWidget(self.part_from_label)
+        row.addWidget(self.part_from)
+        row.addSpacing(6)
+        row.addWidget(self.part_to_label)
+        row.addWidget(self.part_to)
+        row.addStretch(1)
+
+        self.part_summary = QLabel()
+        self.part_summary.setWordWrap(True)
+        col.addLayout(row)
+        col.addWidget(self.part_summary)
+        return self.part_box
 
     def _build_dest_row(self):
         box = QWidget()
@@ -488,6 +527,14 @@ class MainWindow(QMainWindow):
                       [t("bitrate_v0")] + [t("bitrate_cbr", kbps=k)
                                            for k in ("320", "256", "192", "128")])
         self.embed_check.setText(t("embed"))
+        self.part_check.setText(t("part_check"))
+        self.part_from_label.setText(t("part_from"))
+        self.part_to_label.setText(t("part_to"))
+        for edit in (self.part_from, self.part_to):
+            edit.setToolTip(t("part_tip"))
+        self.part_from.setAccessibleName(t("part_from").rstrip(":"))
+        self.part_to.setAccessibleName(t("part_to").rstrip(":"))
+        self._sync_part_video()
 
         self.tlang_label.setText(t("transcript_lang"))
         self.tfmt_label.setText(t("transcript_format"))
@@ -536,6 +583,48 @@ class MainWindow(QMainWindow):
         self.opt_stack.setCurrentIndex(
             {"video": 0, "audio": 1, "mp3": 2, "transcript": 3}[mode])
         self.embed_check.setVisible(mode in ("audio", "mp3"))
+        # A transcript is always the whole thing.
+        self.part_box.setVisible(mode != "transcript")
+
+    def _part_section(self):
+        """The part to download, as (start, end) seconds; ValueError if it doesn't fit."""
+        duration = self.info["duration"] if self.info else 0
+        return core.parse_section(self.part_from.text(), self.part_to.text(), duration)
+
+    def _sync_part_video(self):
+        """Fit the part row to the video on screen: its length, or that it's live."""
+        live = bool(self.info and self.info["is_live"])
+        if live:
+            self.part_check.setChecked(False)
+        self.part_check.setEnabled(not live)
+        self.part_check.setToolTip(t("part_live") if live else t("part_check_tip"))
+        duration = self.info["duration"] if self.info else 0
+        self.part_to.setPlaceholderText(core.format_time(duration) if duration else "")
+        self._sync_part()
+
+    def _sync_part(self):
+        """Enable the times with the box, and say what they come to."""
+        on = self.part_check.isChecked() and self.part_check.isEnabled()
+        self.part_from.setEnabled(on)
+        self.part_to.setEnabled(on)
+        self.part_summary.setVisible(on)
+        if not on:
+            return
+        try:
+            start, end = self._part_section()
+        except ValueError as exc:
+            # Two empty fields are where everyone starts: a hint, not an error.
+            empty = not (self.part_from.text().strip() or self.part_to.text().strip())
+            self.part_summary.setStyleSheet("color: palette(mid);" if empty else "color: #e53935;")
+            self.part_summary.setText(str(exc))
+            return
+        self.part_summary.setStyleSheet("color: palette(mid);")
+        if end is None:
+            self.part_summary.setText(t("part_summary_open", start=core.format_time(start)))
+        else:
+            self.part_summary.setText(t("part_summary", start=core.format_time(start),
+                                        end=core.format_time(end),
+                                        length=core.format_time(end - start)))
 
     def _on_url_changed(self):
         # A new link invalidates whatever metadata is on screen.
@@ -546,6 +635,10 @@ class MainWindow(QMainWindow):
             self.res_combo.addItem(t("best_available"), "best")
             self.transcripts = []
             self._fill_transcript_langs()
+            # Times typed for one video rarely fit the next; they stay in the
+            # fields, but the next download is whole until asked otherwise.
+            self.part_check.setChecked(False)
+            self._sync_part_video()
 
     def paste_and_fetch(self):
         text = QApplication.clipboard().text().strip()
@@ -595,6 +688,7 @@ class MainWindow(QMainWindow):
 
         self.transcripts = info.get("transcripts") or []
         self._fill_transcript_langs()
+        self._sync_part_video()
 
         self.thumb_label.clear()
         if info["thumbnail"]:
@@ -645,6 +739,14 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, t("download_failed_title"), t("transcript_none"))
             return
 
+        section = None
+        if mode != "transcript" and self.part_check.isChecked() and self.part_check.isEnabled():
+            try:
+                section = self._part_section()
+            except ValueError as exc:
+                QMessageBox.warning(self, t("part_invalid_title"), str(exc))
+                return
+
         # txt is parsed here and vtt is served as-is, so neither needs ffmpeg.
         if (mode != "transcript" or container == "srt") and not core.ffmpeg_location():
             QMessageBox.critical(self, t("ffmpeg_missing_title"), t("ffmpeg_missing_body"))
@@ -661,7 +763,7 @@ class MainWindow(QMainWindow):
         self.dl_worker = DownloadWorker(
             url, self.dest_dir, mode, quality,
             container, self.embed_check.isChecked(),
-            self.cookies_browser,
+            self.cookies_browser, section,
         )
         self.dl_worker.progress.connect(self._on_progress)
         self.dl_worker.stage.connect(self._on_stage)

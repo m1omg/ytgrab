@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Build the helper programs the Android app runs: ffmpeg (with LAME, for MP3)
-# and the QuickJS runtime yt-dlp needs to solve YouTube's challenges.
+# Build the helper programs the Android app runs: ffmpeg (with LAME, for MP3,
+# and mbedTLS, to fetch just a part of a video itself) and the QuickJS runtime
+# yt-dlp needs to solve YouTube's challenges.
 #
 # Android only lets an app execute files from its native library directory,
 # and only files packaged as lib*.so end up there, so the executables are
@@ -20,6 +21,8 @@ FFMPEG_VERSION=8.1.3
 FFMPEG_SHA256=7138d28c96d9d3e3af4ee3d8cad72741f8ffb40da90c1112235dea3ecd3178a3
 LAME_VERSION=3.100
 LAME_SHA256=ddfe36cab873794038ae2c1210557ad34857a4b6bdc515785d1da9e175b1da1e
+MBEDTLS_VERSION=3.6.7
+MBEDTLS_SHA256=a7e8bcbec0e6f761b4af24f25677626b35f762f68eef79c08677a363212d11f6
 QJS_TAG=v0.17.0
 QJS_COMMIT=6d46d07d04041b40f4f49eaa7fdebe44c314c699
 
@@ -71,27 +74,48 @@ if [ ! -f "$PREFIX/lib/libmp3lame.a" ]; then
     make -j"$JOBS" >/dev/null && make install >/dev/null)
 fi
 
+# -- mbedTLS (static libraries only) ------------------------------------------
+# ffmpeg's HTTPS. It only fetches the part of a video the user asked for;
+# everything else is still downloaded by yt-dlp.
+if [ ! -f "$PREFIX/lib/libmbedtls.a" ]; then
+  tarball=$(fetch "https://github.com/Mbed-TLS/mbedtls/releases/download/mbedtls-$MBEDTLS_VERSION/mbedtls-$MBEDTLS_VERSION.tar.bz2" "$MBEDTLS_SHA256")
+  rm -rf "$WORK/mbedtls" && mkdir -p "$WORK/mbedtls"
+  tar -xjf "$tarball" -C "$WORK/mbedtls" --strip-components=1
+  cmake -S "$WORK/mbedtls" -B "$WORK/mbedtls-build" \
+    -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
+    -DANDROID_ABI="$ABI" -DANDROID_PLATFORM="android-$API" \
+    -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$PREFIX" \
+    -DENABLE_PROGRAMS=OFF -DENABLE_TESTING=OFF -DMBEDTLS_FATAL_WARNINGS=OFF \
+    -DUSE_SHARED_MBEDTLS_LIBRARY=OFF -DUSE_STATIC_MBEDTLS_LIBRARY=ON >/dev/null
+  cmake --build "$WORK/mbedtls-build" -j"$JOBS" >/dev/null
+  cmake --install "$WORK/mbedtls-build" >/dev/null
+fi
+
 # -- ffmpeg -----------------------------------------------------------------
 # Only what yt-dlp asks of it: remuxing and merging streams, MP3 encoding,
-# subtitle conversion and cover art. Downloading is yt-dlp's job, so the
-# network code stays out.
+# subtitle conversion and cover art - and fetching a part of a stream, which
+# is all its network code is for.
 asm_flags=()
 case "$ABI" in x86|x86_64) asm_flags=(--disable-x86asm) ;; esac  # no nasm needed
-if [ ! -f "$WORK/ffmpeg/ffmpeg" ]; then
+ff_config=(
+  --target-os=android --arch="$FF_ARCH" --cpu="$FF_CPU" --enable-cross-compile
+  --cc="$CC" --cxx="$CXX" --ld="$CC" --ar="$AR" --nm="$NM" --ranlib="$RANLIB" --strip="$STRIP"
+  --sysroot="$TC/sysroot" --pkg-config=false
+  --extra-cflags="-O2 -I$PREFIX/include" --extra-ldflags="-L$PREFIX/lib"
+  --extra-ldexeflags="-static"
+  --disable-autodetect --enable-zlib --enable-libmp3lame --enable-mbedtls --enable-version3
+  --disable-shared --enable-static --disable-debug --disable-doc
+  --disable-ffplay --disable-ffprobe --disable-avdevice
+  "${asm_flags[@]}"
+)
+# A build made with other options (or an older version) is rebuilt, not reused.
+stamp="$FFMPEG_VERSION ${ff_config[*]}"
+if [ ! -f "$WORK/ffmpeg/ffmpeg" ] || [ "$(cat "$WORK/ffmpeg/.ytgrab-stamp" 2>/dev/null)" != "$stamp" ]; then
   tarball=$(fetch "https://ffmpeg.org/releases/ffmpeg-$FFMPEG_VERSION.tar.xz" "$FFMPEG_SHA256")
   rm -rf "$WORK/ffmpeg" && mkdir -p "$WORK/ffmpeg"
   tar -xJf "$tarball" -C "$WORK/ffmpeg" --strip-components=1
-  (cd "$WORK/ffmpeg" &&
-    ./configure --target-os=android --arch="$FF_ARCH" --cpu="$FF_CPU" --enable-cross-compile \
-      --cc="$CC" --cxx="$CXX" --ld="$CC" --ar="$AR" --nm="$NM" --ranlib="$RANLIB" --strip="$STRIP" \
-      --sysroot="$TC/sysroot" --pkg-config=false \
-      --extra-cflags="-O2 -I$PREFIX/include" --extra-ldflags="-L$PREFIX/lib" \
-      --extra-ldexeflags="-static" \
-      --disable-autodetect --enable-zlib --enable-libmp3lame \
-      --disable-shared --enable-static --disable-debug --disable-doc \
-      --disable-ffplay --disable-ffprobe --disable-avdevice --disable-network \
-      "${asm_flags[@]}" >/dev/null &&
-    make -j"$JOBS" >/dev/null)
+  (cd "$WORK/ffmpeg" && ./configure "${ff_config[@]}" >/dev/null && make -j"$JOBS" >/dev/null)
+  printf '%s' "$stamp" > "$WORK/ffmpeg/.ytgrab-stamp"
 fi
 
 # -- QuickJS ----------------------------------------------------------------

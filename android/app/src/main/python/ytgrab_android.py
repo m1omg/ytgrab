@@ -78,13 +78,16 @@ def _stage_text(name):
     return i18n.t(key if key in i18n.STRINGS[i18n.DEFAULT_LANGUAGE] else "stage_processing")
 
 
-def download(url, dest_dir, mode, quality, container, embed, listener):
+def download(url, dest_dir, mode, quality, container, embed, listener, start=-1, end=-1):
     """Download into dest_dir, reporting to listener; returns a JSON result.
 
     listener is a Kotlin object with onProgress(json), onStage(text) and
-    isCancelled(). The result is {"ok": true, "path": ...}, or {"ok": false}
-    with either "cancelled": true or an "error" message.
+    isCancelled(). start and end, in seconds, keep only that part of the
+    video; -1 means the beginning or the end. The result is
+    {"ok": true, "path": ...}, or {"ok": false} with either
+    "cancelled": true or an "error" message.
     """
+    section = (start, end if end >= 0 else None) if start >= 0 else None
     last = [0.0]
 
     def on_progress(d):
@@ -116,7 +119,8 @@ def download(url, dest_dir, mode, quality, container, embed, listener):
 
     try:
         path = core.download(url, dest_dir, mode, quality, container, bool(embed),
-                             progress_hook=on_progress, postprocessor_hook=on_postprocess)
+                             progress_hook=on_progress, postprocessor_hook=on_postprocess,
+                             section=section)
         return json.dumps({"ok": True, "path": str(path)})
     except Cancelled:
         return json.dumps({"ok": False, "cancelled": True})

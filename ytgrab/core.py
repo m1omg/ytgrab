@@ -4,12 +4,16 @@ Everything that talks to yt-dlp lives here; the UIs only supply a request and
 receive progress callbacks.
 """
 
+import contextlib
+import functools
 import html
 import os
 import re
 import shutil
+import subprocess
 import sys
 import textwrap
+import threading
 import time
 import uuid
 from pathlib import Path
@@ -17,7 +21,10 @@ from urllib.parse import urlparse
 
 from yt_dlp import YoutubeDL
 from yt_dlp.cookies import CookieLoadError
-from yt_dlp.utils import DownloadError
+from yt_dlp.postprocessor import get_postprocessor
+from yt_dlp.postprocessor.common import PostProcessor
+from yt_dlp.postprocessor.ffmpeg import FFmpegPostProcessor
+from yt_dlp.utils import DownloadError, Popen, download_range_func
 
 from . import i18n
 from .i18n import t
@@ -107,6 +114,30 @@ def ffmpeg_location():
 
 def has_ffmpeg():
     return ffmpeg_location() is not None
+
+
+def ffmpeg_binary():
+    """The ffmpeg program itself, wherever ffmpeg_location() points."""
+    location = ffmpeg_location()
+    if location and Path(location).is_dir():
+        return shutil.which("ffmpeg", path=location)
+    return location
+
+
+@functools.lru_cache(maxsize=None)
+def ffmpeg_reads_https(binary):
+    """Whether this ffmpeg can fetch a stream itself.
+
+    Cutting a part out during the download needs that; a build without its
+    network code can still cut a finished file.
+    """
+    try:
+        out, _, _ = Popen.run([binary, "-hide_banner", "-protocols"], text=True,
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
+    except Exception:  # noqa: BLE001 - a broken ffmpeg shows up later anyway
+        return False
+    inputs = out.split("Output:")[0]
+    return "https" in inputs.split()
 
 
 # --------------------------------------------------------------------------
@@ -229,6 +260,84 @@ def subtitles_to_text(path, width=80):
     return textwrap.fill(text, width) + "\n" if text else ""
 
 
+# --------------------------------------------------------------------------
+# parts of a video
+# --------------------------------------------------------------------------
+
+_TIME_RE = re.compile(r"[0-9]+(?:[:.,][0-9]+){0,2}")
+
+
+def parse_time(text):
+    """'16:15' -> 975, '1:02:03' -> 3723, '75' -> 75, '' -> None.
+
+    A dot or comma works like a colon (16.15), as clock times are often
+    written that way and a phone's number pad has no colon. Whole seconds
+    only. Raises ValueError for anything else.
+    """
+    text = re.sub(r"\s+", "", text or "")
+    if not text:
+        return None
+    if not _TIME_RE.fullmatch(text):
+        raise ValueError(text)
+    parts = [int(part) for part in re.split(r"[:.,]", text)]
+    # Only the leading field may run past 59: "90:00" is fine, "1:75" a typo.
+    if any(part >= 60 for part in parts[1:]):
+        raise ValueError(text)
+    seconds = 0
+    for part in parts:
+        seconds = seconds * 60 + part
+    return seconds
+
+
+def format_time(seconds):
+    """975 -> '16:15', 3723 -> '1:02:03', 0 -> '0:00'."""
+    seconds = int(seconds)
+    h, m, s = seconds // 3600, seconds % 3600 // 60, seconds % 60
+    return f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
+
+
+def parse_section(start_text, end_text, duration=0, lang=None):
+    """The part typed into From and To, as (start, end) seconds.
+
+    An empty From is the beginning and an empty To the end; an end past the
+    end of the video is the end. end is None only when the length is unknown.
+    Raises ValueError with a message to show the user.
+    """
+    try:
+        start = parse_time(start_text)
+    except ValueError:
+        raise ValueError(t("part_bad_time", lang, text=start_text.strip())) from None
+    try:
+        end = parse_time(end_text)
+    except ValueError:
+        raise ValueError(t("part_bad_time", lang, text=end_text.strip())) from None
+    if start is None and end is None:
+        raise ValueError(t("part_empty", lang))
+    start = start or 0
+    duration = int(duration or 0)
+    if duration:
+        if start >= duration:
+            raise ValueError(t("part_start_late", lang, length=format_time(duration)))
+        if end is None or end > duration:
+            end = duration
+    if end is not None and end <= start:
+        raise ValueError(t("part_order", lang))
+    return start, end
+
+
+def _stamp(seconds):
+    """975 -> '16m15s', 3723 -> '1h02m03s': a time that fits in a file name."""
+    seconds = int(seconds)
+    h, m, s = seconds // 3600, seconds % 3600 // 60, seconds % 60
+    return f"{h}h{m:02d}m{s:02d}s" if h else f"{m}m{s:02d}s"
+
+
+def part_label(section):
+    """What a part's file name ends with, e.g. '16m15s-16m45s'."""
+    start, end = section
+    return f"{_stamp(start)}-{_stamp(end) if end is not None else ''}"
+
+
 def base_opts(cookies_browser=None):
     opts = {
         "quiet": True,
@@ -280,6 +389,142 @@ def _is_bot_check(exc):
     return bool(_BOT_CHECK.search(str(exc)))
 
 
+# ffmpeg fetches a part itself and says nothing about why it failed, so a
+# refused stream looks like any other failure.
+def _is_ffmpeg_failure(exc):
+    return "ffmpeg exited with code" in str(exc)
+
+
+def _part_not_fetched(exc):
+    """ffmpeg could not fetch the part; the whole video may still download."""
+    return _is_ffmpeg_failure(exc) or "cannot be partially downloaded" in str(exc)
+
+
+# The ffmpeg runs started by the current thread's download, so that a cancel
+# can stop one: yt-dlp waits for ffmpeg without calling the progress hooks,
+# which is where a cancel normally lands.
+_running = threading.local()
+
+
+def _track_ffmpeg_runs():
+    try:
+        from yt_dlp.downloader import external
+    except ImportError:
+        return
+    base = getattr(external, "Popen", None)
+    if base is None or getattr(base, "_ytgrab_tracked", False):
+        return
+
+    class TrackedPopen(base):
+        _ytgrab_tracked = True
+
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            runs = getattr(_running, "processes", None)
+            if runs is not None:
+                runs.append(self)
+
+    external.Popen = TrackedPopen
+
+
+_track_ffmpeg_runs()
+
+
+def _use_ffmpeg_for_parts(location):
+    """Let yt-dlp hand a part to the ffmpeg at `location`.
+
+    yt-dlp only cuts during the download if it finds ffmpeg by itself, which
+    it does on PATH rather than at ffmpeg_location - its command line sets
+    this instead. A bundled ffmpeg is never on PATH, so without this a part
+    download would stop with "ffmpeg is not installed".
+    """
+    var = getattr(FFmpegPostProcessor, "_ffmpeg_location", None)
+    if var is not None and location:
+        var.set(location)
+
+
+class _PartWatch:
+    """Progress for a part ffmpeg is fetching, and a way to stop it.
+
+    yt-dlp only reports back once ffmpeg is done, so the progress comes from
+    ffmpeg's own progress file. It is handed to the progress hook the way
+    yt-dlp would, and whatever the hook raises - a cancel - stops ffmpeg.
+    """
+
+    POLL_SECONDS = 0.5
+
+    def __init__(self, hook, progress_file, length):
+        self.hook, self.file, self.length = hook, Path(progress_file), length
+        self.processes = []
+        self.stopped = None      # what the hook raised, if it did
+        self.finished = False    # yt-dlp has reported the part done
+        self._done = threading.Event()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+
+    def __enter__(self):
+        _running.processes = self.processes
+        self._thread.start()
+        return self
+
+    def __exit__(self, *exc):
+        _running.processes = None
+        self._done.set()
+        self._thread.join(timeout=5)
+
+    def wrap(self, hook):
+        """yt-dlp's own hook calls; once the part is done, this one goes quiet."""
+        def wrapped(d):
+            if d.get("status") == "finished":
+                self.finished = True
+            return hook(d)
+        return wrapped
+
+    def _read(self):
+        """(seconds written, bytes written) from ffmpeg's newest report."""
+        try:
+            with open(self.file, "rb") as f:
+                f.seek(0, os.SEEK_END)
+                f.seek(max(0, f.tell() - 4096))
+                tail = f.read().decode("ascii", "replace")
+        except OSError:
+            return None
+        times = re.findall(r"^out_time_us=(\d+)", tail, re.M)
+        sizes = re.findall(r"^total_size=(\d+)", tail, re.M)
+        if not times or not sizes:
+            return None
+        return int(times[-1]) / 1_000_000, int(sizes[-1])
+
+    def _run(self):
+        began = None
+        while not self._done.wait(self.POLL_SECONDS):
+            if self.finished:
+                return
+            report = self._read()
+            if report is None:
+                began = None    # not started yet, or a retry cleared it
+                continue
+            seconds, size = report
+            now = time.monotonic()
+            began = began or now
+            elapsed = now - began
+            d = {"status": "downloading", "downloaded_bytes": size, "elapsed": elapsed,
+                 "speed": size / elapsed if elapsed > 0 else None}
+            fraction = min(seconds / self.length, 1.0) if self.length else 0
+            if fraction >= 0.01 and size:
+                d["total_bytes_estimate"] = size / fraction
+                d["eta"] = elapsed / fraction - elapsed
+            try:
+                self.hook(d)
+            except BaseException as exc:  # noqa: BLE001 - re-raised by download()
+                self.stopped = exc
+                for proc in list(self.processes):
+                    try:
+                        proc.kill()
+                    except OSError:
+                        pass
+                return
+
+
 def _attempts():
     if time.monotonic() < _prefer_fallback_until:
         return (_FALLBACK, {}, _FALLBACK_IPV4)
@@ -294,13 +539,15 @@ def _clear_dir(path):
             entry.unlink(missing_ok=True)
 
 
-def _extract(url, opts, download, work_dir=None):
+def _extract(url, opts, download, work_dir=None, stopped=None, setup=None):
     """Run yt-dlp, trying other routes when YouTube stops it.
 
-    Retries only on a bot check or a refused stream; anything else, a cancel
-    included, ends it at once. If every route fails, the defaults' error is
-    the one reported - a fallback failing for an unrelated reason (no IPv4
-    route, say) would only hide it.
+    Retries only on a bot check or a refused stream - which, for a part
+    ffmpeg fetches, is any ffmpeg failure; anything else, a cancel included,
+    ends it at once. `stopped` says whether a cancel cut ffmpeg off, and
+    `setup` gets each YoutubeDL before it runs. If every route fails, the
+    defaults' error is the one reported - a fallback failing for an unrelated
+    reason (no IPv4 route, say) would only hide it.
     """
     global _prefer_fallback_until
     first = default_error = None
@@ -311,8 +558,12 @@ def _extract(url, opts, download, work_dir=None):
             _clear_dir(work_dir)
         try:
             with YoutubeDL({**opts, **overrides}) as ydl:
+                if setup is not None:
+                    setup(ydl)
                 info = ydl.extract_info(url, download=download)
         except DownloadError as exc:
+            if stopped is not None and stopped():
+                raise
             if isinstance((exc.exc_info or (None, None))[1], CookieLoadError):
                 raise LoginReadError(opts["cookiesfrombrowser"][0], _plain(exc)) from exc
             if not overrides:
@@ -320,7 +571,8 @@ def _extract(url, opts, download, work_dir=None):
             # A preferred fallback failing says nothing about the defaults, so
             # they still get their turn - some videos only play through them.
             preferred = overrides and first is None
-            if not (_is_forbidden(exc) or _is_bot_check(exc) or preferred):
+            if not (_is_forbidden(exc) or _is_bot_check(exc) or _is_ffmpeg_failure(exc)
+                    or preferred):
                 if first is None:
                     raise
                 break
@@ -376,8 +628,13 @@ def fetch_info(url, cookies_browser=None):
 
 
 def build_opts(out_dir, mode, quality, container="mp4", embed_thumbnail=True,
-               progress_hook=None, postprocessor_hook=None, cookies_browser=None):
-    """Translate a download request into yt-dlp options."""
+               progress_hook=None, postprocessor_hook=None, cookies_browser=None,
+               section=None):
+    """Translate a download request into yt-dlp options.
+
+    section is (start, end) in seconds to fetch only that part; end may be
+    None for the rest of the video.
+    """
     if mode not in MODES:
         raise ValueError("unknown mode: %r" % mode)
     if mode == "transcript":
@@ -387,7 +644,19 @@ def build_opts(out_dir, mode, quality, container="mp4", embed_thumbnail=True,
         raise ValueError("unknown container: %r" % container)
 
     opts = base_opts(cookies_browser)
-    opts["outtmpl"] = str(Path(out_dir) / "%(title)s.%(ext)s")
+    name = "%(title)s"
+    if section and mode != "transcript":
+        start, end = section
+        name += f" ({part_label(section)})"
+        opts["download_ranges"] = download_range_func(
+            None, [(start, end if end is not None else float("inf"))])
+        if mode in ("audio", "mp3"):
+            # ffmpeg starts from the last seek point before the cut, seconds
+            # early in a WebM; audio can start on the exact packet instead.
+            # Video can't: it has to begin on a keyframe, which an MP4 then
+            # hides up to the cut.
+            opts["external_downloader_args"] = {"ffmpeg_o": ["-copypriorss", "0"]}
+    opts["outtmpl"] = str(Path(out_dir) / f"{name}.%(ext)s")
     if progress_hook:
         opts["progress_hooks"] = [progress_hook]
     if postprocessor_hook:
@@ -479,13 +748,103 @@ def unique_path(path):
         n += 1
 
 
+def _cut(path, section):
+    """Keep only the part of a finished file, without re-encoding it."""
+    start, end = section
+    out = path.with_name(f"{path.stem}.cut{path.suffix}")
+    args = [ffmpeg_binary(), "-y", "-hide_banner", "-loglevel", "error",
+            "-ss", str(start), "-i", str(path)]
+    if end is not None:
+        args += ["-t", str(end - start)]
+    # As during a download: audio starts on the exact packet, video on the
+    # keyframe before the cut.
+    args += ["-map", "0", "-c", "copy", "-copypriorss:a", "0", str(out)]
+    _, err, code = Popen.run(args, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if code != 0 or not out.is_file():
+        raise DownloadError("ffmpeg could not cut the part out: " + err.strip()[-300:])
+    path.unlink()
+    return out.replace(path)
+
+
+class CutPP(PostProcessor):
+    """Keeps only the part of a whole download; reported as the "Cut" stage."""
+
+    def __init__(self, downloader, section):
+        super().__init__(downloader)
+        self.section = section
+
+    def run(self, info):
+        _cut(Path(info["filepath"]), self.section)
+        return [], info
+
+
+def _fetch_part(url, opts, work_dir, section, progress_hook):
+    """Fetch only the part, or failing that the whole video and cut it here.
+
+    ffmpeg fetches the part itself, which some builds can't and some servers
+    refuse; the whole video then still gets the user their part.
+    """
+    location = ffmpeg_binary()
+    if not location:
+        raise DownloadError("Cutting out a part needs ffmpeg, which was not found.")
+    _use_ffmpeg_for_parts(location)
+    if ffmpeg_reads_https(location):
+        start, end = section
+        watch = None
+        if progress_hook:
+            report = work_dir / "ffmpeg-progress.temp"
+            opts.setdefault("external_downloader_args", {}).setdefault("ffmpeg_o", []).extend(
+                ["-progress", "file:" + str(report)])
+            watch = _PartWatch(progress_hook, report, end - start if end is not None else None)
+            opts["progress_hooks"] = [watch.wrap(progress_hook)]
+
+        def stopped():
+            return watch is not None and watch.stopped is not None
+
+        try:
+            with watch or contextlib.nullcontext():
+                _extract(url, opts, download=True, work_dir=work_dir, stopped=stopped)
+        except DownloadError as exc:
+            if stopped():
+                raise watch.stopped from None
+            if not _part_not_fetched(exc):
+                raise
+        else:
+            if stopped():  # cancelled just as ffmpeg finished
+                raise watch.stopped
+            return find_output_file(work_dir)
+        _clear_dir(work_dir)
+
+    whole = {key: value for key, value in opts.items()
+             if key not in ("download_ranges", "external_downloader_args", "postprocessors")}
+    if progress_hook:
+        whole["progress_hooks"] = [progress_hook]
+
+    def cut_first(ydl):
+        # The part comes out before anything converts the file, so an MP3
+        # encodes thirty seconds rather than the whole hour.
+        ydl.add_post_processor(CutPP(ydl, section))
+        for pp_def in opts.get("postprocessors", []):
+            pp_def = dict(pp_def)
+            when = pp_def.pop("when", "post_process")
+            ydl.add_post_processor(get_postprocessor(pp_def.pop("key"))(ydl, **pp_def), when=when)
+
+    _extract(url, whole, download=True, work_dir=work_dir, setup=cut_first)
+    return find_output_file(work_dir)
+
+
 def download(url, dest_dir, mode, quality, container="mp4", embed_thumbnail=True,
-             progress_hook=None, postprocessor_hook=None, cookies_browser=None):
+             progress_hook=None, postprocessor_hook=None, cookies_browser=None,
+             section=None):
     """Download into dest_dir and return the finished file's Path.
+
+    section (start, end) keeps only that part of the video; see build_opts().
 
     Work happens in a scratch directory inside dest_dir so the final move is a
     rename on the same filesystem rather than a copy of a multi-gigabyte file.
     """
+    if mode == "transcript":
+        section = None
     dest_dir = Path(dest_dir).expanduser()
     dest_dir.mkdir(parents=True, exist_ok=True)
     work_dir = dest_dir / (".ytgrab-tmp-" + uuid.uuid4().hex[:8])
@@ -493,10 +852,12 @@ def download(url, dest_dir, mode, quality, container="mp4", embed_thumbnail=True
 
     try:
         opts = build_opts(work_dir, mode, quality, container, embed_thumbnail,
-                          progress_hook, postprocessor_hook, cookies_browser)
-        _extract(url, opts, download=True, work_dir=work_dir)
-
-        produced = find_output_file(work_dir)
+                          progress_hook, postprocessor_hook, cookies_browser, section)
+        if section:
+            produced = _fetch_part(url, opts, work_dir, section, progress_hook)
+        else:
+            _extract(url, opts, download=True, work_dir=work_dir)
+            produced = find_output_file(work_dir)
         if produced is None:
             if mode == "transcript":
                 raise DownloadError("No transcript available in that language.")

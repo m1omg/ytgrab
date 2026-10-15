@@ -73,6 +73,22 @@ listed first; YouTube's machine-generated ones are marked *(automatic)*.
   collapsed. This format needs no ffmpeg.
 * *SRT* and *WebVTT* keep the timings, for use as real subtitle files.
 
+## Only a part
+
+Tick **Only a part** (on Android, the *Only a part* switch) and type where the
+part starts and ends as minutes:seconds - say **From** `16:15` **To** `16:45`.
+Long videos take hours:minutes:seconds (`1:02:03`), and a dot or comma works in
+place of the colon (`16.15`), which suits a phone's number pad. Leave *From*
+empty to start at the beginning, or *To* empty to run to the end.
+
+Only that part is downloaded, not the whole video, and the file name says which
+part it is: `… (16m15s-16m45s).mp3`. Audio and MP4 video start exactly where you
+asked. MKV can only start video on a keyframe, so an MKV part may begin a moment
+(usually a second or two) early.
+
+If ffmpeg can't fetch the part by itself - some servers refuse it - ytgrab
+downloads the whole video and cuts the part out, so it still works, just slower.
+
 ## "Confirm you're not a bot"
 
 YouTube sometimes stops a connection it doesn't trust and asks it to sign in.

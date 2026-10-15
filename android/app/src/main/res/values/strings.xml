@@ -40,6 +40,19 @@
     <string name="bitrate_v0">VBR V0 - best quality (~245 kbps)</string>
     <string name="bitrate_cbr">%1$s kbps CBR</string>
     <string name="embed">Embed cover art and metadata</string>
+
+    <!-- part of a video -->
+    <string name="part_switch">Only a part</string>
+    <string name="part_from">From</string>
+    <string name="part_to">To</string>
+    <string name="part_tip">Minutes and seconds, like 16:15 or 16.15; for long videos hours too, like 1:02:03. An empty From starts at the beginning, an empty To runs to the end. Only that part is downloaded.</string>
+    <string name="part_mkv_note">Video in MKV starts at the nearest keyframe, a moment early. MP4 starts exactly.</string>
+    <string name="part_summary">Saves %1$s–%2$s, %3$s long</string>
+    <string name="part_summary_open">Saves from %1$s to the end</string>
+    <string name="part_bad_time">“%1$s” isn\'t a time - write it as minutes and seconds, like 16:15.</string>
+    <string name="part_empty">Enter where the part starts, where it ends, or both.</string>
+    <string name="part_start_late">The part starts after the video ends (%1$s).</string>
+    <string name="part_order">The part has to end after it starts.</string>
     <string name="transcript_lang">Language</string>
     <string name="transcript_format">Format</string>
     <string name="transcript_txt">Plain text - one flowing transcript</string>

@@ -72,6 +72,24 @@ STRINGS = {
         "bitrate_cbr": "{kbps} kbps CBR",
         "embed": "Embed cover art and metadata",
 
+        # -- part of a video --
+        "part_check": "Only a part",
+        "part_check_tip": "Download just a stretch of the video, such as 16:15 to 16:45",
+        "part_from": "From:",
+        "part_to": "To:",
+        "part_tip": ("Minutes:seconds, like 16:15, or hours:minutes:seconds. An empty From "
+                     "starts at the beginning, an empty To runs to the end. Only that part "
+                     "is downloaded. Video in MKV starts at the nearest keyframe, a moment "
+                     "early; MP4 and audio start exactly."),
+        "part_summary": "Saves {start}–{end}, {length} long",
+        "part_summary_open": "Saves from {start} to the end",
+        "part_bad_time": "“{text}” isn't a time - write it as minutes:seconds, like 16:15.",
+        "part_empty": "Enter where the part starts, where it ends, or both.",
+        "part_start_late": "The part starts after the video ends ({length}).",
+        "part_order": "The part has to end after it starts.",
+        "part_invalid_title": "Can't download that part",
+        "part_live": "A part can't be cut from a live stream.",
+
         # -- transcript --
         "transcript_lang": "Language:",
         "transcript_format": "Format:",
@@ -128,6 +146,7 @@ STRINGS = {
         "stage_Metadata": "Writing metadata",
         "stage_MoveFiles": "Finishing up",
         "stage_SubtitlesConvertor": "Converting subtitles",
+        "stage_Cut": "Cutting out the part",
 
         # -- engine errors --
         "err_bot": ("YouTube asked this machine to confirm it isn't a bot, and stopped the "
@@ -232,6 +251,24 @@ STRINGS = {
         "bitrate_cbr": "{kbps} kb/s CBR",
         "embed": "Vložiť obal a metaúdaje",
 
+        # -- part of a video --
+        "part_check": "Len časť",
+        "part_check_tip": "Stiahne len úsek videa, napríklad od 16:15 do 16:45",
+        "part_from": "Od:",
+        "part_to": "Do:",
+        "part_tip": ("Minúty:sekundy, napríklad 16:15, alebo hodiny:minúty:sekundy. Prázdne Od "
+                     "znamená od začiatku, prázdne Do až do konca. Stiahne sa len táto časť. "
+                     "Video v MKV začne na najbližšom kľúčovom snímku, o chvíľu skôr; MP4 a "
+                     "zvuk začnú presne."),
+        "part_summary": "Uloží {start}–{end}, dĺžka {length}",
+        "part_summary_open": "Uloží od {start} do konca",
+        "part_bad_time": "„{text}“ nie je čas – napíšte ho ako minúty:sekundy, napríklad 16:15.",
+        "part_empty": "Zadajte, kde časť začína, kde končí, alebo oboje.",
+        "part_start_late": "Časť začína až po konci videa ({length}).",
+        "part_order": "Časť musí skončiť až po svojom začiatku.",
+        "part_invalid_title": "Túto časť nemožno stiahnuť",
+        "part_live": "Z priameho prenosu sa časť vystrihnúť nedá.",
+
         # -- prepis --
         "transcript_lang": "Jazyk:",
         "transcript_format": "Formát:",
@@ -288,6 +325,7 @@ STRINGS = {
         "stage_Metadata": "Zapisovanie metaúdajov",
         "stage_MoveFiles": "Dokončovanie",
         "stage_SubtitlesConvertor": "Konverzia titulkov",
+        "stage_Cut": "Vystrihovanie časti",
 
         # -- engine errors --
         "err_bot": ("YouTube žiada od tohto počítača potvrdenie, že nie je robot, a zastavil "

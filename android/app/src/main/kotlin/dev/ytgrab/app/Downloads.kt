@@ -14,6 +14,7 @@ data class DownloadRequest(
     val quality: String,
     val container: String,
     val embed: Boolean,
+    val part: Part? = null,
 ) {
     fun putInto(intent: Intent): Intent = intent
         .putExtra(EXTRA_URL, url)
@@ -22,6 +23,8 @@ data class DownloadRequest(
         .putExtra(EXTRA_QUALITY, quality)
         .putExtra(EXTRA_CONTAINER, container)
         .putExtra(EXTRA_EMBED, embed)
+        .putExtra(EXTRA_PART_START, part?.start ?: -1)
+        .putExtra(EXTRA_PART_END, part?.end ?: -1)
 
     companion object {
         private const val EXTRA_URL = "url"
@@ -30,6 +33,8 @@ data class DownloadRequest(
         private const val EXTRA_QUALITY = "quality"
         private const val EXTRA_CONTAINER = "container"
         private const val EXTRA_EMBED = "embed"
+        private const val EXTRA_PART_START = "part_start"
+        private const val EXTRA_PART_END = "part_end"
 
         fun from(intent: Intent): DownloadRequest? = DownloadRequest(
             url = intent.getStringExtra(EXTRA_URL) ?: return null,
@@ -38,6 +43,9 @@ data class DownloadRequest(
             quality = intent.getStringExtra(EXTRA_QUALITY) ?: return null,
             container = intent.getStringExtra(EXTRA_CONTAINER) ?: return null,
             embed = intent.getBooleanExtra(EXTRA_EMBED, true),
+            part = intent.getIntExtra(EXTRA_PART_START, -1).takeIf { it >= 0 }?.let { start ->
+                Part(start, intent.getIntExtra(EXTRA_PART_END, -1).takeIf { it >= 0 })
+            },
         )
     }
 }
