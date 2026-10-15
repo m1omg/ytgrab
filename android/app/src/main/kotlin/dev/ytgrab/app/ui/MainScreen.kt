@@ -48,9 +48,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -63,6 +65,8 @@ import dev.ytgrab.app.DownloadStatus
 import dev.ytgrab.app.Downloads
 import dev.ytgrab.app.MainViewModel
 import dev.ytgrab.app.Mode
+import dev.ytgrab.app.PartCheck
+import dev.ytgrab.app.Parts
 import dev.ytgrab.app.R
 import dev.ytgrab.app.SavedFile
 import dev.ytgrab.app.VideoInfo
@@ -292,6 +296,99 @@ private fun Options(viewModel: MainViewModel) {
             )
         }
     }
+    if (viewModel.partAvailable) PartSection(viewModel)
+}
+
+/** "Only a part": a switch, then From and To, and what they come to. */
+@Composable
+private fun PartSection(viewModel: MainViewModel) {
+    val info = viewModel.info ?: return
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 56.dp)
+            .toggleable(value = viewModel.partOn, onValueChange = { viewModel.partOn = it }, role = Role.Switch),
+    ) {
+        Text(stringResource(R.string.part_switch), modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+        Switch(checked = viewModel.partOn, onCheckedChange = null)
+    }
+    if (!viewModel.partOn) return
+
+    val check = viewModel.partCheck()
+    val badText = (check as? PartCheck.BadTime)?.text
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+        TimeField(
+            value = viewModel.partFrom,
+            onValueChange = { viewModel.partFrom = it },
+            label = stringResource(R.string.part_from),
+            placeholder = Parts.format(0),
+            isError = badText != null && badText == viewModel.partFrom.trim(),
+            imeAction = ImeAction.Next,
+            modifier = Modifier.weight(1f),
+        )
+        TimeField(
+            value = viewModel.partTo,
+            onValueChange = { viewModel.partTo = it },
+            label = stringResource(R.string.part_to),
+            placeholder = if (info.duration > 0) Parts.format(info.duration) else "",
+            isError = badText != null && badText == viewModel.partTo.trim(),
+            imeAction = ImeAction.Done,
+            modifier = Modifier.weight(1f),
+        )
+    }
+
+    // An empty pair is where everyone starts, so it reads as a hint, not an error.
+    val (summary, isError) = when (check) {
+        is PartCheck.Valid -> {
+            val (start, end) = check.part
+            val text = if (end == null) {
+                stringResource(R.string.part_summary_open, Parts.format(start))
+            } else {
+                stringResource(R.string.part_summary, Parts.format(start), Parts.format(end), Parts.format(end - start))
+            }
+            text to false
+        }
+        PartCheck.Empty -> stringResource(R.string.part_empty) to false
+        is PartCheck.BadTime -> stringResource(R.string.part_bad_time, check.text) to true
+        is PartCheck.StartsLate -> stringResource(R.string.part_start_late, Parts.format(check.duration)) to true
+        PartCheck.Backwards -> stringResource(R.string.part_order) to true
+        null -> "" to false
+    }
+    Text(
+        summary,
+        style = MaterialTheme.typography.bodyMedium,
+        color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+        // TalkBack reads out what the typed times come to as they change.
+        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+    )
+    Hint(stringResource(R.string.part_tip))
+    if (viewModel.mode == Mode.VIDEO && viewModel.container == "mkv") {
+        Hint(stringResource(R.string.part_mkv_note))
+    }
+}
+
+/** A From or To time. The number pad has no colon, so a dot or comma does as well. */
+@Composable
+private fun TimeField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    placeholder: String,
+    isError: Boolean,
+    imeAction: ImeAction,
+    modifier: Modifier,
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = { Text(label) },
+        placeholder = { Text(placeholder) },
+        singleLine = true,
+        isError = isError,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = imeAction),
+        modifier = modifier,
+    )
 }
 
 /** A labelled dropdown; TalkBack reads it as one control with its current value. */

@@ -74,6 +74,15 @@
   }
   .check { display: flex; align-items: center; gap: 8px; margin-top: 16px; font-size: 14px; }
   .check input { width: 16px; height: 16px; accent-color: var(--accent); }
+  .times { display: flex; gap: 10px; }
+  .times label.field { flex: 1; margin-top: 10px; }
+  input.time {
+    display: block; width: 100%; box-sizing: border-box; margin-top: 6px;
+    padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--panel-2); color: var(--text); font-size: 14px; outline: none;
+  }
+  input.time:focus { border-color: var(--accent); }
+  .hint { color: var(--muted); font-size: 12.5px; margin-top: 8px; }
 
   .bar { height: 8px; background: var(--panel-2); border-radius: 99px; overflow: hidden; }
   .bar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .25s; }
@@ -173,6 +182,23 @@
       <input type="checkbox" id="embed" checked> {{ t.embed }}
     </label>
 
+    <div id="partRow">
+      <label class="check" title="{{ t.part_check_tip }}">
+        <input type="checkbox" id="part"> {{ t.part_check }}
+      </label>
+      <div id="partFields" class="hidden">
+        <div class="times">
+          <label class="field">{{ t.part_from.rstrip(":") }}
+            <input id="partFrom" class="time" type="text" placeholder="0:00" autocomplete="off">
+          </label>
+          <label class="field">{{ t.part_to.rstrip(":") }}
+            <input id="partTo" class="time" type="text" autocomplete="off">
+          </label>
+        </div>
+        <div class="hint">{{ t.part_tip }}</div>
+      </div>
+    </div>
+
     <button class="primary" id="go">{{ t.download }}</button>
   </div>
 
@@ -196,6 +222,7 @@ const T = {{ t | tojson }};
 const $ = id => document.getElementById(id);
 let mode = "video";
 let poll = null;
+let duration = 0;    // of the video last read, to check the part against
 
 // Slovak writes 1,5 MB where English writes 1.5 MB.
 function num(value, digits) {
@@ -228,8 +255,12 @@ document.querySelectorAll(".mode").forEach(el => {
     $("mp3Opts").classList.toggle("hidden", mode !== "mp3");
     $("transcriptOpts").classList.toggle("hidden", mode !== "transcript");
     $("thumbRow").classList.toggle("hidden", mode === "video" || mode === "transcript");
+    // A transcript is always the whole thing.
+    $("partRow").classList.toggle("hidden", mode === "transcript");
   };
 });
+
+$("part").onchange = () => $("partFields").classList.toggle("hidden", !$("part").checked);
 
 async function fetchInfo() {
   const url = $("url").value.trim();
@@ -252,6 +283,13 @@ async function fetchInfo() {
     $("submeta").textContent = [d.uploader, fmtDur(d.duration), d.is_live ? T.live : ""]
       .filter(Boolean).join(" · ");
     $("info").classList.remove("hidden");
+    duration = d.duration || 0;
+    $("partTo").placeholder = fmtDur(duration);
+    // A part can't be cut from a live stream; and a new video starts whole.
+    $("part").checked = false;
+    $("part").disabled = !!d.is_live;
+    $("part").parentElement.title = d.is_live ? T.part_live : T.part_check_tip;
+    $("partFields").classList.add("hidden");
 
     const res = $("res");
     res.innerHTML = '<option value="best"></option>';
@@ -307,6 +345,10 @@ $("go").onclick = async () => {
     container: mode === "transcript" ? $("tfmt").value : $("container").value,
     embed_thumbnail: $("embed").checked
   };
+  if (mode !== "transcript" && $("part").checked) {
+    body.part = { start: $("partFrom").value, end: $("partTo").value };
+    body.duration = duration;
+  }
   $("go").disabled = true;
   $("prog").classList.remove("hidden");
   $("progErr").classList.add("hidden");

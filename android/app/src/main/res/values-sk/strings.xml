@@ -38,6 +38,19 @@
     <string name="bitrate_v0">VBR V0 – najvyššia kvalita (~245 kb/s)</string>
     <string name="bitrate_cbr">%1$s kb/s CBR</string>
     <string name="embed">Vložiť obal a metaúdaje</string>
+
+    <!-- časť videa -->
+    <string name="part_switch">Len časť</string>
+    <string name="part_from">Od</string>
+    <string name="part_to">Do</string>
+    <string name="part_tip">Minúty a sekundy, napríklad 16:15 alebo 16.15; pri dlhých videách aj hodiny, napríklad 1:02:03. Prázdne Od znamená od začiatku, prázdne Do až do konca. Stiahne sa len táto časť.</string>
+    <string name="part_mkv_note">Video v MKV začne na najbližšom kľúčovom snímku, o chvíľu skôr. MP4 začne presne.</string>
+    <string name="part_summary">Uloží %1$s–%2$s, dĺžka %3$s</string>
+    <string name="part_summary_open">Uloží od %1$s do konca</string>
+    <string name="part_bad_time">„%1$s“ nie je čas – napíšte ho ako minúty a sekundy, napríklad 16:15.</string>
+    <string name="part_empty">Zadajte, kde časť začína, kde končí, alebo oboje.</string>
+    <string name="part_start_late">Časť začína až po konci videa (%1$s).</string>
+    <string name="part_order">Časť musí skončiť až po svojom začiatku.</string>
     <string name="transcript_lang">Jazyk</string>
     <string name="transcript_format">Formát</string>
     <string name="transcript_txt">Čistý text – súvislý prepis</string>

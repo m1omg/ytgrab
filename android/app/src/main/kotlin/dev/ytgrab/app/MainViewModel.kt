@@ -69,6 +69,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     var transcriptFormat by mutableStateOf("txt")
     var embed by mutableStateOf(true)
 
+    // "Only a part": the times stay as typed, the switch decides if they count.
+    var partOn by mutableStateOf(false)
+    var partFrom by mutableStateOf("")
+    var partTo by mutableStateOf("")
+
     private var fetchJob: Job? = null
 
     init {
@@ -106,6 +111,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private fun show(video: VideoInfo) {
         info = video
         thumbnail = null
+        // Times typed for one video rarely fit the next, so it starts whole.
+        partOn = false
         if (height != "best" && height.toIntOrNull() !in video.heights) height = "best"
         transcriptLang = defaultTranscript(video.transcripts)
         if (video.thumbnail.isNotEmpty()) {
@@ -122,14 +129,30 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         return tracks.firstOrNull()?.code
     }
 
+    /** Whether "Only a part" can be offered: it needs the video's details, and no live stream. */
+    val partAvailable: Boolean
+        get() = info?.isLive == false && mode != Mode.TRANSCRIPT
+
+    /** What the part fields come to, or null while the whole video is wanted. */
+    fun partCheck(): PartCheck? {
+        val video = info ?: return null
+        if (!partOn || !partAvailable) return null
+        return Parts.check(partFrom, partTo, video.duration)
+    }
+
     /** What the Download button should fetch, or null if something is missing. */
     fun request(): DownloadRequest? {
         val link = url.trim().takeIf { it.isNotEmpty() } ?: return null
         val title = info?.title?.takeIf { it.isNotEmpty() } ?: link
+        val part = when (val check = partCheck()) {
+            null -> null
+            is PartCheck.Valid -> check.part
+            else -> return null  // the fields say what's wrong
+        }
         return when (mode) {
-            Mode.VIDEO -> DownloadRequest(link, title, "video", height, container, embed)
-            Mode.AUDIO -> DownloadRequest(link, title, "audio", audioStream, "mp4", embed)
-            Mode.MP3 -> DownloadRequest(link, title, "mp3", bitrate, "mp4", embed)
+            Mode.VIDEO -> DownloadRequest(link, title, "video", height, container, embed, part)
+            Mode.AUDIO -> DownloadRequest(link, title, "audio", audioStream, "mp4", embed, part)
+            Mode.MP3 -> DownloadRequest(link, title, "mp3", bitrate, "mp4", embed, part)
             Mode.TRANSCRIPT -> transcriptLang?.let {
                 DownloadRequest(link, title, "transcript", it, transcriptFormat, false)
             }

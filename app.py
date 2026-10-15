@@ -26,7 +26,7 @@ JOB_TTL_SECONDS = 6 * 3600
 
 # yt-dlp reports postprocessor names with the "FFmpeg" prefix stripped.
 KNOWN_STAGES = ("ExtractAudio", "Merger", "VideoRemuxer", "VideoConvertor",
-                "EmbedThumbnail", "Metadata", "MoveFiles", "SubtitlesConvertor")
+                "EmbedThumbnail", "Metadata", "MoveFiles", "SubtitlesConvertor", "Cut")
 
 app = Flask(__name__)
 jobs = {}
@@ -76,13 +76,14 @@ def make_hooks(job_id):
     return on_progress, on_postprocess
 
 
-def run_job(job_id, url, mode, quality, container, embed_thumbnail):
+def run_job(job_id, url, mode, quality, container, embed_thumbnail, section=None):
     on_progress, on_postprocess = make_hooks(job_id)
     job_dir = DOWNLOAD_DIR / job_id
     try:
         set_job(job_id, state="starting")
         path = core.download(url, job_dir, mode, quality, container,
-                             embed_thumbnail, on_progress, on_postprocess)
+                             embed_thumbnail, on_progress, on_postprocess,
+                             section=section)
         set_job(job_id, state="done", percent=100.0, stage="",
                 title=path.stem, filename=path.name, filepath=str(path),
                 filesize=path.stat().st_size, finished_at=time.time())
@@ -148,6 +149,20 @@ def api_download():
     if container not in allowed:
         return jsonify(error=t("err_unknown_container", lang)), 400
 
+    # "Only a part": the From and To exactly as typed, checked here.
+    section = None
+    part = data.get("part")
+    if isinstance(part, dict) and mode != "transcript":
+        try:
+            duration = int(float(data.get("duration") or 0))
+        except (TypeError, ValueError):
+            duration = 0
+        try:
+            section = core.parse_section(str(part.get("start") or ""), str(part.get("end") or ""),
+                                         duration, lang)
+        except ValueError as exc:
+            return jsonify(error=str(exc)), 400
+
     job_id = uuid.uuid4().hex
     with jobs_lock:
         jobs[job_id] = {"id": job_id, "state": "queued", "percent": 0.0,
@@ -157,7 +172,7 @@ def api_download():
     threading.Thread(
         target=run_job,
         args=(job_id, url, mode, data.get("quality", "best"), container,
-              bool(data.get("embed_thumbnail", True))),
+              bool(data.get("embed_thumbnail", True)), section),
         daemon=True,
     ).start()
     return jsonify(job_id=job_id)

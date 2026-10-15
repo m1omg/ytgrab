@@ -40,6 +40,11 @@ def selftest():
     missing = [e for e in ("libmp3lame", "aac", "libopus") if e not in out]
     print(f"encoders {'all present' if not missing else 'MISSING: ' + ', '.join(missing)}")
 
+    # "Only a part" still works without https, by fetching the whole video.
+    parts = ("fetched alone (ffmpeg has https)" if core.ffmpeg_reads_https(exe)
+             else "cut from the whole video (ffmpeg has no https)")
+    print(f"parts    {parts}")
+
     # yt-dlp degrades quietly without these, so check them here rather than
     # letting a download fail at the very last step.
     absent = []
