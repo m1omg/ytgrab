@@ -167,8 +167,9 @@ deno or node installed on the machine.
 
 Binaries cannot be cross-compiled: a Windows `.exe` has to be built on Windows
 and a macOS `.app` on macOS. The GitHub Actions workflow does all the builds on
-GitHub's runners — push a tag like `v1.0.0` to produce a release, or trigger it
-manually from the Actions tab.
+GitHub's runners. Merging a new version number in `ytgrab/__init__.py` into
+`main` releases it by itself; pushing a tag like `v1.0.0`, or starting the
+workflow from the Actions tab, works too.
 
 ### Android
 

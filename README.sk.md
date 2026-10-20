@@ -177,9 +177,9 @@ programu deno alebo node nainštalovaného v počítači.
 
 Aplikáciu nemožno zostaviť pre iný systém, než na akom bežíte: `.exe` pre
 Windows treba zostaviť na Windowse a `.app` pre macOS na macOS. Workflow
-GitHub Actions urobí všetky zostavenia na serveroch GitHubu — vydanie
-vytvoríte pushnutím tagu ako `v1.0.0`, prípadne workflow spustíte ručne v karte
-Actions.
+GitHub Actions urobí všetky zostavenia na serveroch GitHubu. Keď sa do `main`
+zlúči nové číslo verzie v `ytgrab/__init__.py`, vydanie sa vytvorí samo; funguje
+aj pushnutie tagu ako `v1.0.0` alebo ručné spustenie v karte Actions.
 
 ### Android
 
