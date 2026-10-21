@@ -748,22 +748,82 @@ def unique_path(path):
         n += 1
 
 
-def _cut(path, section):
-    """Keep only the part of a finished file, without re-encoding it."""
+def _remux(path, args, what):
+    """Run ffmpeg over a finished file with `args`, replacing it in place."""
+    out = path.with_name(f"{path.stem}.{what}{path.suffix}")
+    _, err, code = Popen.run(
+        [ffmpeg_binary(), "-y", "-hide_banner", "-loglevel", "error", *args, str(out)],
+        text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if code != 0 or not out.is_file():
+        raise DownloadError(f"ffmpeg could not {what} the part: " + err.strip()[-300:])
+    return out.replace(path)
+
+
+def _starts_on_keyframe(path, info):
+    """Whether a part's video can only start on the keyframe before the cut.
+
+    An MP4 hides the frames before the cut; MKV and WebM have no way to.
+    """
+    return path.suffix.lower() in (".mkv", ".webm") and info.get("vcodec") not in (None, "none")
+
+
+def _stream_starts(path):
+    """When the first video and audio packets play, as {"video": s, "audio": s}.
+
+    ffmpeg's frame checksums list every packet with its stream and time,
+    which needs no ffprobe - the Android app has none.
+    """
+    out, _, _ = Popen.run(
+        [ffmpeg_binary(), "-v", "error", "-copyts", "-i", str(path), "-map", "0", "-c", "copy",
+         "-t", "60", "-f", "framemd5", "-"],
+        text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    timebase, kind, starts = {}, {}, {}
+    for line in out.splitlines():
+        if line.startswith("#tb "):
+            index, value = line[4:].split(":", 1)
+            num, den = value.strip().split("/")
+            timebase[int(index)] = int(num) / int(den)
+        elif line.startswith("#media_type "):
+            index, value = line[12:].split(":", 1)
+            kind[int(index)] = value.strip()
+        elif line and not line.startswith("#"):
+            index = int(line.split(",")[0])
+            if index in timebase and kind.get(index) not in (None, *starts):
+                starts[kind[index]] = int(line.split(",")[2]) * timebase[index]
+    return starts
+
+
+def _align_start(path):
+    """Start an MKV part's sound with its picture.
+
+    Each stream starts at its own seek point before the cut, the audio's
+    often seconds before the video's keyframe; that audio played over a
+    black screen. It is dropped, so the part starts on its first picture.
+    """
+    starts = _stream_starts(path)
+    video, audio = starts.get("video"), starts.get("audio")
+    if video is None or audio is None or audio >= video - 0.02:
+        return path
+    # -ss counts from the file's start, which is the audio's.
+    return _remux(path, ["-ss", f"{video - audio:.3f}", "-i", str(path),
+                         "-map", "0", "-c", "copy", "-copypriorss:a", "0"], "align")
+
+
+def _cut(path, section, exact_audio=True):
+    """Keep only the part of a finished file, without re-encoding it.
+
+    Video starts on the keyframe before the cut; audio starts on the exact
+    packet, unless it has to start with a video that can't (see
+    _starts_on_keyframe), and then _align_start() trims it.
+    """
     start, end = section
-    out = path.with_name(f"{path.stem}.cut{path.suffix}")
-    args = [ffmpeg_binary(), "-y", "-hide_banner", "-loglevel", "error",
-            "-ss", str(start), "-i", str(path)]
+    args = ["-ss", str(start), "-i", str(path)]
     if end is not None:
         args += ["-t", str(end - start)]
-    # As during a download: audio starts on the exact packet, video on the
-    # keyframe before the cut.
-    args += ["-map", "0", "-c", "copy", "-copypriorss:a", "0", str(out)]
-    _, err, code = Popen.run(args, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    if code != 0 or not out.is_file():
-        raise DownloadError("ffmpeg could not cut the part out: " + err.strip()[-300:])
-    path.unlink()
-    return out.replace(path)
+    args += ["-map", "0", "-c", "copy"]
+    if exact_audio:
+        args += ["-copypriorss:a", "0"]
+    return _remux(path, args, "cut")
 
 
 def _part_chapters(chapters, section):
@@ -786,14 +846,18 @@ def _part_chapters(chapters, section):
     return kept
 
 
-class PartChaptersPP(PostProcessor):
-    """Fits the chapters to a part ffmpeg has fetched; see _part_chapters()."""
+class PartFixupPP(PostProcessor):
+    """Tidies a part ffmpeg has fetched: an MKV's sound and picture start
+    together (see _align_start()) and the chapters fit (see _part_chapters())."""
 
     def __init__(self, downloader, section):
         super().__init__(downloader)
         self.section = section
 
     def run(self, info):
+        path = Path(info["filepath"])
+        if _starts_on_keyframe(path, info):
+            _align_start(path)
         info["chapters"] = _part_chapters(info.get("chapters"), self.section)
         return [], info
 
@@ -806,7 +870,11 @@ class CutPP(PostProcessor):
         self.section = section
 
     def run(self, info):
-        _cut(Path(info["filepath"]), self.section)
+        path = Path(info["filepath"])
+        keyframe = _starts_on_keyframe(path, info)
+        _cut(path, self.section, exact_audio=not keyframe)
+        if keyframe:
+            _align_start(path)
         info["chapters"] = _part_chapters(info.get("chapters"), self.section)
         return [], info
 
@@ -854,7 +922,7 @@ def _fetch_part(url, opts, work_dir, section, progress_hook):
         try:
             with watch or contextlib.nullcontext():
                 _extract(url, fetch, download=True, work_dir=work_dir, stopped=stopped,
-                         setup=_postprocessors_after(lambda ydl: PartChaptersPP(ydl, section), opts))
+                         setup=_postprocessors_after(lambda ydl: PartFixupPP(ydl, section), opts))
         except DownloadError as exc:
             if stopped():
                 raise watch.stopped from None
