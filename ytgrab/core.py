@@ -766,6 +766,38 @@ def _cut(path, section):
     return out.replace(path)
 
 
+def _part_chapters(chapters, section):
+    """The video's chapters as they fall in the part, timed from its start.
+
+    Left as they are, they keep the whole video's length: an MP4 turns them
+    into a track running to the video's end, and players show that length.
+    """
+    start, end = section
+    kept = []
+    for chapter in chapters or []:
+        begin, finish = chapter.get("start_time"), chapter.get("end_time")
+        if begin is None or (finish is not None and finish <= start) \
+                or (end is not None and begin >= end):
+            continue
+        if end is not None:
+            finish = end if finish is None else min(finish, end)
+        kept.append({**chapter, "start_time": max(begin, start) - start,
+                     "end_time": None if finish is None else finish - start})
+    return kept
+
+
+class PartChaptersPP(PostProcessor):
+    """Fits the chapters to a part ffmpeg has fetched; see _part_chapters()."""
+
+    def __init__(self, downloader, section):
+        super().__init__(downloader)
+        self.section = section
+
+    def run(self, info):
+        info["chapters"] = _part_chapters(info.get("chapters"), self.section)
+        return [], info
+
+
 class CutPP(PostProcessor):
     """Keeps only the part of a whole download; reported as the "Cut" stage."""
 
@@ -775,7 +807,24 @@ class CutPP(PostProcessor):
 
     def run(self, info):
         _cut(Path(info["filepath"]), self.section)
+        info["chapters"] = _part_chapters(info.get("chapters"), self.section)
         return [], info
+
+
+def _postprocessors_after(first, opts):
+    """A setup for _extract() running first(ydl) before opts' postprocessors.
+
+    yt-dlp puts postprocessors added later after the ones in the options;
+    these have to see the file before anything converts it or writes its
+    metadata.
+    """
+    def setup(ydl):
+        ydl.add_post_processor(first(ydl))
+        for pp_def in opts.get("postprocessors", []):
+            pp_def = dict(pp_def)
+            when = pp_def.pop("when", "post_process")
+            ydl.add_post_processor(get_postprocessor(pp_def.pop("key"))(ydl, **pp_def), when=when)
+    return setup
 
 
 def _fetch_part(url, opts, work_dir, section, progress_hook):
@@ -801,9 +850,11 @@ def _fetch_part(url, opts, work_dir, section, progress_hook):
         def stopped():
             return watch is not None and watch.stopped is not None
 
+        fetch = {key: value for key, value in opts.items() if key != "postprocessors"}
         try:
             with watch or contextlib.nullcontext():
-                _extract(url, opts, download=True, work_dir=work_dir, stopped=stopped)
+                _extract(url, fetch, download=True, work_dir=work_dir, stopped=stopped,
+                         setup=_postprocessors_after(lambda ydl: PartChaptersPP(ydl, section), opts))
         except DownloadError as exc:
             if stopped():
                 raise watch.stopped from None
@@ -819,17 +870,10 @@ def _fetch_part(url, opts, work_dir, section, progress_hook):
              if key not in ("download_ranges", "external_downloader_args", "postprocessors")}
     if progress_hook:
         whole["progress_hooks"] = [progress_hook]
-
-    def cut_first(ydl):
-        # The part comes out before anything converts the file, so an MP3
-        # encodes thirty seconds rather than the whole hour.
-        ydl.add_post_processor(CutPP(ydl, section))
-        for pp_def in opts.get("postprocessors", []):
-            pp_def = dict(pp_def)
-            when = pp_def.pop("when", "post_process")
-            ydl.add_post_processor(get_postprocessor(pp_def.pop("key"))(ydl, **pp_def), when=when)
-
-    _extract(url, whole, download=True, work_dir=work_dir, setup=cut_first)
+    # The part comes out before anything converts the file, so an MP3
+    # encodes thirty seconds rather than the whole hour.
+    _extract(url, whole, download=True, work_dir=work_dir,
+             setup=_postprocessors_after(lambda ydl: CutPP(ydl, section), opts))
     return find_output_file(work_dir)
 
 
