@@ -13,25 +13,13 @@ from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QLabel, QLineEdit, QPushButton, QComboBox, QCheckBox, QProgressBar,
     QRadioButton, QButtonGroup, QStackedWidget, QFileDialog, QFrame,
-    QGroupBox, QMessageBox,
+    QGroupBox, QMessageBox, QScrollArea, QSizePolicy,
 )
 
-from . import core, i18n, __version__
-from .i18n import t
+from . import core, i18n, jobs, __version__
+from .i18n import t, tn
 
-
-# yt-dlp reports postprocessor names with the "FFmpeg" prefix stripped.
-KNOWN_STAGES = ("ExtractAudio", "Merger", "VideoRemuxer", "VideoConvertor",
-                "EmbedThumbnail", "Metadata", "MoveFiles", "SubtitlesConvertor", "Cut")
-
-
-def stage_key(name):
-    """Translation key for a postprocessor, so the label follows the language."""
-    return f"stage_{name}" if name in KNOWN_STAGES else "stage_processing"
-
-
-class Cancelled(Exception):
-    """Raised inside a yt-dlp hook to abort a download."""
+ERROR_STYLE = "color: #e53935;"
 
 
 def muted_style():
@@ -88,68 +76,217 @@ class ThumbLoader(QObject):
             self.loaded.emit(self.token, data)
 
 
-class DownloadWorker(QThread):
-    progress = Signal(dict)
-    stage = Signal(str)
-    finished_ok = Signal(str)
-    failed = Signal(str)
-    cancelled = Signal()
+class QueueBridge(QObject):
+    """Carries the queue's news from its thread to the window's."""
 
-    def __init__(self, url, dest, mode, quality, container, embed, cookies_browser=None,
-                 section=None):
+    changed = Signal(object)  # a Job, or None when the list itself changed
+
+
+# --------------------------------------------------------------------------
+# the download list
+# --------------------------------------------------------------------------
+
+class ElidedLabel(QLabel):
+    """One line that ends in … when it doesn't fit; the tooltip has it all.
+
+    A long title or link would otherwise widen the whole window.
+    """
+
+    def __init__(self):
         super().__init__()
-        self.url, self.dest = url, dest
-        self.mode, self.quality = mode, quality
-        self.container, self.embed = container, embed
-        self.cookies_browser = cookies_browser
-        self.section = section
-        self._cancel = False
+        self._full = ""
+        self.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
 
-    def cancel(self):
-        self._cancel = True
+    def set_full_text(self, text):
+        self._full = text
+        self.setToolTip(text)
+        self._elide()
 
-    def _on_progress(self, d):
-        if self._cancel:
-            raise Cancelled()
-        if d.get("status") == "downloading":
-            total = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
-            done = d.get("downloaded_bytes") or 0
-            self.progress.emit({
-                "percent": (done / total * 100) if total else 0,
-                "downloaded": done,
-                "total": total,
-                "speed": d.get("speed") or 0,
-                "eta": d.get("eta") or 0,
-            })
-        elif d.get("status") == "finished":
-            self.stage.emit("stage_processing")
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._elide()
 
-    def _on_postprocess(self, d):
-        if self._cancel:
-            raise Cancelled()
-        if d.get("status") == "started":
-            # The key travels, not the text, so a language switch mid-download
-            # relabels the stage that is already showing.
-            self.stage.emit(stage_key(d.get("postprocessor") or ""))
+    def _elide(self):
+        width = max(self.contentsRect().width(), 20)
+        self.setText(self.fontMetrics().elidedText(self._full, Qt.ElideRight, width))
 
-    def run(self):
-        try:
-            path = core.download(
-                self.url, self.dest, self.mode, self.quality,
-                self.container, self.embed,
-                progress_hook=self._on_progress,
-                postprocessor_hook=self._on_postprocess,
-                cookies_browser=self.cookies_browser,
-                section=self.section,
-            )
-            self.finished_ok.emit(str(path))
-        except Cancelled:
-            self.cancelled.emit()
-        except Exception as exc:  # noqa: BLE001
-            if self._cancel:
-                self.cancelled.emit()
+
+class JobRow(QFrame):
+    """One download in the list: what it is, how far it has got, what can be done."""
+
+    def __init__(self, job, window):
+        super().__init__()
+        self.job, self.window = job, window
+        self.setFrameShape(QFrame.StyledPanel)
+        grid = QGridLayout(self)
+        grid.setContentsMargins(10, 6, 10, 8)
+        grid.setVerticalSpacing(3)
+
+        self.title = ElidedLabel()
+        font = self.title.font()
+        font.setBold(True)
+        self.title.setFont(font)
+        self.detail = QLabel()
+        self.detail.setWordWrap(True)
+        self.detail.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        self.bar = QProgressBar()
+        self.bar.setTextVisible(False)
+        self.bar.setMaximumHeight(6)
+        self.error = QLabel()
+        self.error.setWordWrap(True)
+        self.error.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        self.error.setStyleSheet(ERROR_STYLE)
+        self.error.setTextInteractionFlags(Qt.TextSelectableByMouse)
+
+        self.retry_btn = QPushButton()
+        self.retry_btn.clicked.connect(lambda: window.queue.retry(job))
+        self.action_btn = QPushButton()
+        self.action_btn.clicked.connect(self._act)
+        buttons = QHBoxLayout()
+        buttons.setSpacing(6)
+        buttons.addWidget(self.retry_btn)
+        buttons.addWidget(self.action_btn)
+
+        grid.addWidget(self.title, 0, 0)
+        grid.addLayout(buttons, 0, 1, 2, 1, Qt.AlignVCenter)
+        grid.addWidget(self.detail, 1, 0)
+        grid.addWidget(self.bar, 2, 0, 1, 2)
+        grid.addWidget(self.error, 3, 0, 1, 2)
+        grid.setColumnStretch(0, 1)
+        self.restyle()
+        self.refresh()
+
+    def restyle(self):
+        self.detail.setStyleSheet(muted_style())
+
+    def _act(self):
+        job = self.job
+        if job.state == jobs.RUNNING:
+            self.window.queue.cancel(job)
+        elif job.state == jobs.DONE:
+            self.window.show_file(job)
+        else:
+            self.window.queue.remove(job)
+
+    def refresh(self):
+        job = self.job
+        self.title.set_full_text(job.title or job.url)
+        state, numbers = jobs.status(job)
+        self.detail.setText("   ·   ".join(b for b in (jobs.summary(job), state, numbers) if b))
+
+        running = job.state == jobs.RUNNING
+        self.bar.setVisible(running)
+        if running:
+            if job.percent >= 0 and not (job.stage or job.cancelling):
+                self.bar.setRange(0, 100)
+                self.bar.setValue(int(job.percent))
             else:
-                self.failed.emit(core.clean_error(exc, login=self.cookies_browser))
+                self.bar.setRange(0, 0)  # busy until there's a size to count against
+
+        failed = job.state == jobs.FAILED
+        self.error.setVisible(failed)
+        if failed:
+            self.error.setText(core.clean_error(job.error, login=job.login))
+
+        self.retry_btn.setVisible(job.state in (jobs.FAILED, jobs.CANCELLED))
+        self.retry_btn.setText(t("queue_retry"))
+        self.action_btn.setEnabled(not job.cancelling)
+        self.action_btn.setText(t("cancel") if running
+                                else t("show_in_folder") if job.state == jobs.DONE
+                                else t("queue_remove"))
+
+
+class QueuePanel(QWidget):
+    """Every download, in the order they run - one at a time."""
+
+    def __init__(self, window):
+        super().__init__()
+        self.window = window
+        self.rows = {}            # job id -> JobRow
+        self._running_id = None
+        col = QVBoxLayout(self)
+        col.setContentsMargins(0, 0, 0, 0)
+        col.setSpacing(6)
+
+        head = QHBoxLayout()
+        self.title = QLabel()
+        font = self.title.font()
+        font.setBold(True)
+        self.title.setFont(font)
+        self.summary = QLabel()
+        self.cancel_all_btn = QPushButton()
+        self.cancel_all_btn.clicked.connect(window.cancel_all)
+        self.clear_btn = QPushButton()
+        self.clear_btn.clicked.connect(lambda: window.queue.clear_finished())
+        head.addWidget(self.title)
+        head.addSpacing(8)
+        head.addWidget(self.summary)
+        head.addStretch(1)
+        head.addWidget(self.cancel_all_btn)
+        head.addWidget(self.clear_btn)
+
+        self.scroll = QScrollArea()
+        self.scroll.setWidgetResizable(True)
+        self.scroll.setFrameShape(QFrame.NoFrame)
+        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.scroll.setMinimumHeight(150)
+        holder = QWidget()
+        self.list = QVBoxLayout(holder)
+        self.list.setContentsMargins(0, 0, 0, 0)
+        self.list.setSpacing(6)
+        self.list.addStretch(1)
+        self.scroll.setWidget(holder)
+
+        col.addLayout(head)
+        col.addWidget(self.scroll, 1)
+        self.retranslate()
+
+    def sync(self, job_list):
+        """Match the rows to the queue: new jobs get one, gone ones lose theirs."""
+        holder = self.scroll.widget()
+        holder.setUpdatesEnabled(False)
+        wanted = {job.id for job in job_list}
+        for job_id in [key for key in self.rows if key not in wanted]:
+            row = self.rows.pop(job_id)
+            self.list.removeWidget(row)
+            row.deleteLater()
+        for index, job in enumerate(job_list):
+            row = self.rows.get(job.id)
+            if row is None:
+                row = self.rows[job.id] = JobRow(job, self.window)
+            if self.list.indexOf(row) != index:
+                self.list.removeWidget(row)
+                self.list.insertWidget(index, row)
+        holder.setUpdatesEnabled(True)
+        self.update_header(job_list)
+
+    def refresh(self, job):
+        row = self.rows.get(job.id)
+        if row is None:
+            return
+        row.refresh()
+        if job.state == jobs.RUNNING and job.id != self._running_id:
+            # Follow the queue down a long list.
+            self._running_id = job.id
+            self.scroll.ensureWidgetVisible(row)
+        self.update_header(self.window.queue.jobs())
+
+    def update_header(self, job_list):
+        done = sum(job.state == jobs.DONE for job in job_list)
+        self.summary.setText(t("queue_summary", done=done, total=len(job_list)))
+        self.cancel_all_btn.setVisible(any(job.state in (jobs.WAITING, jobs.RUNNING)
+                                           for job in job_list))
+        self.clear_btn.setVisible(any(job.state in jobs.FINISHED for job in job_list))
+
+    def retranslate(self):
+        self.title.setText(t("queue_title"))
+        self.summary.setStyleSheet(muted_style())
+        self.cancel_all_btn.setText(t("queue_cancel_all"))
+        self.clear_btn.setText(t("queue_clear"))
+        for row in self.rows.values():
+            row.restyle()
+            row.refresh()
+        self.update_header(self.window.queue.jobs())
 
 
 # --------------------------------------------------------------------------
@@ -164,18 +301,18 @@ class MainWindow(QMainWindow):
         self.dest_dir = core.default_download_dir()
         self.info_worker = None
         self.thumb_token = 0      # which read the thumbnail on screen belongs to
-        self.dl_worker = None
-        self.last_file = None
         self.info = None          # last metadata read, for relabelling
+        self.links = []           # the links in the box, when there are several
         self.transcripts = []     # subtitle tracks offered by the last read
         self.fetching = False
         # Browser to borrow the YouTube login from, or None for no login.
         saved = QSettings("ytgrab", "ytgrab").value("cookies_browser")
         self.cookies_browser = saved if saved in core.COOKIE_BROWSERS else None
-        # The two progress labels re-render themselves on a language switch,
-        # so each one keeps the callable that produced its current text.
-        self._state_text = None
-        self._stats_text = None
+
+        self.bridge = QueueBridge()
+        self.bridge.changed.connect(self._on_queue_changed)
+        self.queue = jobs.DownloadQueue(on_change=self.bridge.changed.emit,
+                                        login=lambda: self.cookies_browser)
 
         root = QWidget()
         self.setCentralWidget(root)
@@ -190,8 +327,11 @@ class MainWindow(QMainWindow):
         layout.addWidget(self._build_options())
         layout.addWidget(self._build_dest_row())
         layout.addWidget(self._build_actions())
-        layout.addWidget(self._build_progress())
+        self.queue_panel = QueuePanel(self)
+        self.queue_panel.setVisible(False)
+        layout.addWidget(self.queue_panel)
         layout.addStretch(1)
+        self.root_layout = layout
 
         self.retranslate()
         self._sync_mode()
@@ -267,9 +407,31 @@ class MainWindow(QMainWindow):
         font.setBold(True)
         self.title_label.setFont(font)
         self.meta_label = QLabel()
+        self.meta_label.setWordWrap(True)
         self.meta_label.setStyleSheet(muted_style())
         text_col.addWidget(self.title_label)
         text_col.addWidget(self.meta_label)
+
+        # A video that sits in a playlist: that video, or the whole list.
+        self.playlist_box = QWidget()
+        choice = QVBoxLayout(self.playlist_box)
+        choice.setContentsMargins(0, 4, 0, 0)
+        choice.setSpacing(2)
+        self.playlist_this = QRadioButton()
+        self.playlist_whole = QRadioButton()
+        self.playlist_this.setChecked(True)
+        self.playlist_group = QButtonGroup(self)
+        for button in (self.playlist_this, self.playlist_whole):
+            self.playlist_group.addButton(button)
+            choice.addWidget(button)
+        self.playlist_whole.toggled.connect(self._on_playlist_choice)
+        # The list's name wraps under its option, however long it is.
+        self.playlist_name = QLabel()
+        self.playlist_name.setWordWrap(True)
+        self.playlist_name.setContentsMargins(24, 0, 0, 0)
+        choice.addWidget(self.playlist_name)
+        self.playlist_box.setVisible(False)
+        text_col.addWidget(self.playlist_box)
         text_col.addStretch(1)
 
         row.addWidget(self.thumb_label)
@@ -416,48 +578,11 @@ class MainWindow(QMainWindow):
         return box
 
     def _build_actions(self):
-        box = QWidget()
-        row = QHBoxLayout(box)
-        row.setContentsMargins(0, 0, 0, 0)
         self.download_btn = QPushButton()
         self.download_btn.setMinimumHeight(38)
         self.download_btn.setDefault(True)
         self.download_btn.clicked.connect(self.start_download)
-        self.cancel_btn = QPushButton()
-        self.cancel_btn.setMinimumHeight(38)
-        self.cancel_btn.setVisible(False)
-        self.cancel_btn.clicked.connect(self.cancel_download)
-        row.addWidget(self.download_btn, 1)
-        row.addWidget(self.cancel_btn)
-        return box
-
-    def _build_progress(self):
-        self.progress_panel = QWidget()
-        col = QVBoxLayout(self.progress_panel)
-        col.setContentsMargins(0, 0, 0, 0)
-
-        top = QHBoxLayout()
-        self.state_label = QLabel("")
-        self.stats_label = QLabel("")
-        self.stats_label.setStyleSheet(muted_style())
-        self.stats_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        top.addWidget(self.state_label)
-        top.addStretch(1)
-        top.addWidget(self.stats_label)
-
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setTextVisible(False)
-        self.progress_bar.setMaximumHeight(10)
-
-        self.open_btn = QPushButton()
-        self.open_btn.setVisible(False)
-        self.open_btn.clicked.connect(self.open_dest)
-
-        col.addLayout(top)
-        col.addWidget(self.progress_bar)
-        col.addWidget(self.open_btn)
-        self.progress_panel.setVisible(False)
-        return self.progress_panel
+        return self.download_btn
 
     # -- language ----------------------------------------------------------
 
@@ -511,6 +636,16 @@ class MainWindow(QMainWindow):
         self.tlang_combo.setCurrentIndex(
             found if found >= 0 else self._default_transcript_index())
 
+    def _fill_resolutions(self, heights):
+        """Offer these heights after "Best", keeping the current choice if it's still there."""
+        previous = self.res_combo.currentData()
+        self.res_combo.clear()
+        self.res_combo.addItem(t("best_available"), "best")
+        for h in heights:
+            self.res_combo.addItem(f"{h}p", str(h))
+        found = self.res_combo.findData(previous)
+        self.res_combo.setCurrentIndex(max(found, 0))
+
     def retranslate(self):
         """Apply the active language to every widget that shows text."""
         self.lang_menu.setTitle(t("menu_language"))
@@ -523,6 +658,7 @@ class MainWindow(QMainWindow):
         self.link_label.setText(t("link"))
         self.url_edit.setPlaceholderText(t("url_placeholder"))
         self.fetch_btn.setText(t("fetching") if self.fetching else t("fetch"))
+        self.fetch_btn.setToolTip(t("read_one_link") if self.links else "")
         self.paste_btn.setText(t("paste"))
         self.paste_btn.setToolTip(t("paste_tip"))
 
@@ -563,28 +699,12 @@ class MainWindow(QMainWindow):
 
         self.dest_label.setText(t("save_to"))
         self.browse_btn.setText(t("change"))
-        self.download_btn.setText(t("download"))
-        self.cancel_btn.setText(t("cancel"))
-        self.open_btn.setText(t("show_in_folder"))
-
-        if self.info:
-            self._show_meta(self.info)
-        if self._state_text:
-            self.state_label.setText(self._state_text())
-        if self._stats_text:
-            self.stats_label.setText(self._stats_text())
+        self._show_panel()
+        self._sync_download_btn()
+        self.queue_panel.retranslate()
         self.statusBar().showMessage(self._ffmpeg_status())
 
     # -- behaviour ---------------------------------------------------------
-
-    def _set_state(self, render):
-        """Show progress text, remembering how to redraw it in another language."""
-        self._state_text = render
-        self.state_label.setText(render())
-
-    def _set_stats(self, render):
-        self._stats_text = render
-        self.stats_label.setText(render())
 
     def _ffmpeg_status(self):
         loc = core.ffmpeg_location()
@@ -604,18 +724,37 @@ class MainWindow(QMainWindow):
         # A transcript is always the whole thing.
         self.part_box.setVisible(mode != "transcript")
 
+    def _whole_playlist(self):
+        """Whether Download takes the playlist the link names rather than one video."""
+        info = self.info
+        if self.links or not info or not info.get("playlist"):
+            return False
+        return not info.get("video", True) or self.playlist_whole.isChecked()
+
+    def _several(self):
+        """Whether Download adds more than one video: several links, or a playlist."""
+        return bool(self.links) or self._whole_playlist()
+
+    def _on_playlist_choice(self):
+        self._sync_part_video()
+        self._sync_download_btn()
+
     def _part_section(self):
         """The part to download, as (start, end) seconds; ValueError if it doesn't fit."""
         duration = self.info["duration"] if self.info else 0
         return core.parse_section(self.part_from.text(), self.part_to.text(), duration)
 
     def _sync_part_video(self):
-        """Fit the part row to the video on screen: its length, or that it's live."""
+        """Fit the part row to what's on screen: the video's length, a live
+        stream, or several videos at once."""
         live = bool(self.info and self.info["is_live"])
-        if live:
+        several = self._several()
+        if live or several:
             self.part_check.setChecked(False)
-        self.part_check.setEnabled(not live)
-        self.part_check.setToolTip(t("part_live") if live else t("part_check_tip"))
+        self.part_check.setEnabled(not (live or several))
+        self.part_check.setToolTip(t("part_live") if live
+                                   else t("part_one_video") if several
+                                   else t("part_check_tip"))
         duration = self.info["duration"] if self.info else 0
         self.part_to.setPlaceholderText(core.format_time(duration) if duration else "")
         self._sync_part()
@@ -633,7 +772,7 @@ class MainWindow(QMainWindow):
         except ValueError as exc:
             # Two empty fields are where everyone starts: a hint, not an error.
             empty = not (self.part_from.text().strip() or self.part_to.text().strip())
-            self.part_summary.setStyleSheet(muted_style() if empty else "color: #e53935;")
+            self.part_summary.setStyleSheet(muted_style() if empty else ERROR_STYLE)
             self.part_summary.setText(str(exc))
             return
         self.part_summary.setStyleSheet(muted_style())
@@ -644,33 +783,68 @@ class MainWindow(QMainWindow):
                                         end=core.format_time(end),
                                         length=core.format_time(end - start)))
 
+    def _sync_download_btn(self):
+        """Download now, or join the queue - for one video, a playlist or several links."""
+        busy = self.queue.busy()
+        if self.links:
+            text = tn("queue_add_links" if busy else "download_links", len(self.links))
+        elif self._whole_playlist():
+            count = self.info["playlist"]["count"]
+            text = tn("queue_add_n" if busy else "download_n", count)
+        else:
+            text = t("queue_add" if busy else "download")
+        self.download_btn.setText(text)
+
     def _on_url_changed(self):
-        # A new link invalidates whatever metadata is on screen.
-        if self.info_panel.isVisible():
-            self.info_panel.setVisible(False)
+        text = self.url_edit.text()
+        if "\n" in text or "\r" in text:
+            # A pasted list stays on one line, a space between links.
+            self.url_edit.setText(" ".join(text.split()))
+            return
+        found = core.find_links(text)
+        several = found if len(found) > 1 else []
+        if self.info is not None or several != self.links:
+            # A new link invalidates whatever metadata is on screen.
             self.info = None
-            self.res_combo.clear()
-            self.res_combo.addItem(t("best_available"), "best")
-            self.transcripts = []
+            self.links = several
+            self.thumb_token += 1  # a thumbnail still loading belongs to the old link
+            self.thumb_label.clear()
+            self._fill_resolutions(core.STANDARD_HEIGHTS if several else [])
+            self.transcripts = core.common_transcripts(i18n.language()) if several else []
             self._fill_transcript_langs()
             # Times typed for one video rarely fit the next; they stay in the
             # fields, but the next download is whole until asked otherwise.
             self.part_check.setChecked(False)
             self._sync_part_video()
+            self._show_panel()
+        self.fetch_btn.setEnabled(not self.fetching and not self.links)
+        self.fetch_btn.setToolTip(t("read_one_link") if self.links else "")
+        self._sync_download_btn()
 
     def paste_and_fetch(self):
         text = QApplication.clipboard().text().strip()
-        if text:
-            self.url_edit.setText(text)
+        if not text:
+            return
+        found = core.find_links(text)
+        if len(found) > 1:
+            self.url_edit.setText(" ".join(found))
+        else:
+            self.url_edit.setText(found[0] if found else text)
             self.fetch_info()
 
     def fetch_info(self):
-        url = self.url_edit.text().strip()
+        text = self.url_edit.text().strip()
+        found = core.find_links(text)
+        if len(found) > 1:
+            return  # several links download as they are
+        url = found[0] if found else text
         if not core.is_supported_url(url):
             self.statusBar().showMessage(t("invalid_link"), 5000)
             return
         if self.info_worker and self.info_worker.isRunning():
             return
+        if url != text:
+            self.url_edit.setText(url)  # "Watch this: https://..." becomes the link
 
         self.fetching = True
         self.fetch_btn.setEnabled(False)
@@ -685,28 +859,52 @@ class MainWindow(QMainWindow):
 
     def _reset_fetch_btn(self):
         self.fetching = False
-        self.fetch_btn.setEnabled(True)
+        self.fetch_btn.setEnabled(not self.links)
         self.fetch_btn.setText(t("fetch"))
 
-    def _show_meta(self, info):
+    def _show_panel(self):
+        """Fill the panel under the link: several links, a playlist, or a video."""
+        if self.links:
+            self.thumb_label.setVisible(False)
+            self.title_label.setText(tn("batch_title", len(self.links)))
+            self.meta_label.setText(t("batch_note"))
+            self.playlist_box.setVisible(False)
+            self.info_panel.setVisible(True)
+            return
+        info = self.info
+        if not info:
+            self.info_panel.setVisible(False)
+            return
+        playlist = info.get("playlist")
+        self.thumb_label.setVisible(True)
         self.title_label.setText(info["title"])
-        bits = [b for b in (info["uploader"],
-                            core.format_duration(info["duration"]),
-                            t("live") if info["is_live"] else "") if b]
-        self.meta_label.setText("  ·  ".join(bits))
+        if info.get("video", True):
+            bits = (info["uploader"], core.format_duration(info["duration"]),
+                    t("live") if info["is_live"] else "")
+        else:
+            bits = (t("playlist_label"), info["uploader"],
+                    tn("playlist_videos", playlist["count"]))
+        self.meta_label.setText("  ·  ".join(b for b in bits if b))
+        offer = bool(playlist) and info.get("video", True)
+        self.playlist_box.setVisible(offer)
+        if offer:
+            self.playlist_this.setText(t("playlist_this"))
+            self.playlist_whole.setText(tn("playlist_whole", playlist["count"]))
+            self.playlist_name.setText(t("playlist_name", title=playlist["title"]))
+            self.playlist_name.setStyleSheet(muted_style())
+            self.playlist_name.setVisible(bool(playlist["title"]))
+        self.info_panel.setVisible(True)
 
     def _on_info(self, info):
         self.info = info
-        self._show_meta(info)
-
-        self.res_combo.clear()
-        self.res_combo.addItem(t("best_available"), "best")
-        for h in info["heights"]:
-            self.res_combo.addItem(f"{h}p", str(h))
-
-        self.transcripts = info.get("transcripts") or []
+        self.playlist_this.setChecked(True)  # the link names this video; the list is the option
+        self._fill_resolutions(info["heights"])
+        self.transcripts = info.get("transcripts") or (
+            [] if info.get("video", True) else core.common_transcripts(i18n.language()))
         self._fill_transcript_langs()
         self._sync_part_video()
+        self._show_panel()
+        self._sync_download_btn()
 
         self.thumb_label.clear()
         urls = info.get("thumbnails") or [info["thumbnail"]]
@@ -716,7 +914,6 @@ class MainWindow(QMainWindow):
             loader.loaded.connect(self._on_thumb)
             loader.start()
 
-        self.info_panel.setVisible(True)
         self.statusBar().showMessage(t("ready"), 4000)
 
     def _on_thumb(self, token, data):
@@ -728,7 +925,8 @@ class MainWindow(QMainWindow):
 
     def _on_info_failed(self, message):
         self.info = None
-        self.info_panel.setVisible(False)
+        self._show_panel()
+        self._sync_download_btn()
         self.statusBar().showMessage(t("read_failed"), 6000)
         QMessageBox.warning(self, t("read_failed_title"), message)
 
@@ -738,13 +936,16 @@ class MainWindow(QMainWindow):
             self.dest_dir = Path(chosen)
             self.dest_edit.setText(chosen)
 
-    def open_dest(self):
-        target = self.last_file.parent if self.last_file else self.dest_dir
+    def show_file(self, job):
+        target = job.path.parent if job.path else Path(job.dest)
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(target)))
 
     def start_download(self):
-        url = self.url_edit.text().strip()
-        if not core.is_supported_url(url):
+        text = self.url_edit.text().strip()
+        found = core.find_links(text)
+        if not found and core.is_supported_url(text):
+            found = [text]
+        if not found:
             QMessageBox.warning(self, t("no_link_title"), t("no_link_body"))
             return
         mode = self.current_mode()
@@ -774,94 +975,58 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, t("ffmpeg_missing_title"), t("ffmpeg_missing_body"))
             return
 
-        self.download_btn.setVisible(False)
-        self.cancel_btn.setVisible(True)
-        self.progress_panel.setVisible(True)
-        self.open_btn.setVisible(False)
-        self.progress_bar.setRange(0, 0)  # indeterminate until bytes arrive
-        self._set_state(lambda: t("starting"))
-        self._set_stats(lambda: "")
+        def job(url, title=""):
+            return jobs.Job(url, self.dest_dir, mode, quality, container,
+                            self.embed_check.isChecked(), section, title)
 
-        self.dl_worker = DownloadWorker(
-            url, self.dest_dir, mode, quality,
-            container, self.embed_check.isChecked(),
-            self.cookies_browser, section,
-        )
-        self.dl_worker.progress.connect(self._on_progress)
-        self.dl_worker.stage.connect(self._on_stage)
-        self.dl_worker.finished_ok.connect(self._on_done)
-        self.dl_worker.failed.connect(self._on_failed)
-        self.dl_worker.cancelled.connect(self._on_cancelled)
-        self.dl_worker.start()
-
-    def cancel_download(self):
-        if self.dl_worker and self.dl_worker.isRunning():
-            self.cancel_btn.setEnabled(False)
-            self._set_state(lambda: t("cancelling"))
-            self.dl_worker.cancel()
-
-    def _on_progress(self, p):
-        if p["total"]:
-            self.progress_bar.setRange(0, 100)
-            self.progress_bar.setValue(int(p["percent"]))
-            self._set_state(lambda: t("downloading_percent",
-                                      percent=i18n.number(p["percent"])))
+        if len(found) > 1:
+            new = [job(url) for url in found]
+        elif self._whole_playlist():
+            new = [job(entry["url"], entry["title"]) for entry in self.info["playlist"]["entries"]]
         else:
-            self.progress_bar.setRange(0, 0)
-            self._set_state(lambda: t("downloading"))
+            known = self.info and self.info.get("video", True)
+            new = [job(found[0], self.info["title"] if known else "")]
 
-        def stats():
-            bits = []
-            if p["total"]:
-                bits.append(f"{core.format_size(p['downloaded'])} / {core.format_size(p['total'])}")
-            if p["speed"]:
-                bits.append(f"{core.format_size(p['speed'])}/s")
-            if p["eta"]:
-                bits.append(t("eta_left", time=core.format_duration(p["eta"])))
-            return "   ·   ".join(bits)
+        was_busy = self.queue.busy()
+        self.queue.add(new)
+        if was_busy or len(new) > 1:
+            self.statusBar().showMessage(tn("queued_n", len(new)), 5000)
 
-        self._set_stats(stats)
+    def cancel_all(self):
+        answer = QMessageBox.question(self, t("queue_cancel_all"), t("queue_cancel_all_ask"))
+        if answer == QMessageBox.Yes:
+            self.queue.cancel_all()
 
-    def _on_stage(self, key):
-        self.progress_bar.setRange(0, 0)
-        self._set_state(lambda: t(key) + "…")
-        self._set_stats(lambda: "")
+    def _on_queue_changed(self, job):
+        if job is None:
+            job_list = self.queue.jobs()
+            self.queue_panel.sync(job_list)
+            self._show_queue(bool(job_list))
+        else:
+            self.queue_panel.refresh(job)
+            if job.state == jobs.DONE and job.path:
+                self.statusBar().showMessage(t("saved_to", path=job.path), 8000)
+            elif job.state == jobs.FAILED:
+                self.statusBar().showMessage(t("failed"), 6000)
+        self._sync_download_btn()
 
-    def _finish_ui(self):
-        self.download_btn.setVisible(True)
-        self.cancel_btn.setVisible(False)
-        self.cancel_btn.setEnabled(True)
-
-    def _on_done(self, path):
-        self.last_file = Path(path)
-        self.progress_bar.setRange(0, 100)
-        self.progress_bar.setValue(100)
-        self._set_state(lambda: t("saved"))
-        size = self.last_file.stat().st_size if self.last_file.exists() else 0
-        self._set_stats(lambda: f"{self.last_file.name}   ·   {core.format_size(size)}")
-        self.open_btn.setVisible(True)
-        self.statusBar().showMessage(t("saved_to", path=self.last_file), 8000)
-        self._finish_ui()
-
-    def _on_failed(self, message):
-        self.progress_bar.setRange(0, 100)
-        self.progress_bar.setValue(0)
-        self._set_state(lambda: t("failed"))
-        self._set_stats(lambda: "")
-        self._finish_ui()
-        QMessageBox.critical(self, t("download_failed_title"), message)
-
-    def _on_cancelled(self):
-        self.progress_bar.setRange(0, 100)
-        self.progress_bar.setValue(0)
-        self._set_state(lambda: t("cancelled"))
-        self._set_stats(lambda: "")
-        self._finish_ui()
+    def _show_queue(self, visible):
+        """The list takes the window's spare height while there's anything in it."""
+        self.queue_panel.setVisible(visible)
+        layout = self.root_layout
+        layout.setStretchFactor(self.queue_panel, 1 if visible else 0)
+        layout.setStretch(layout.count() - 1, 0 if visible else 1)
 
     def closeEvent(self, event):
-        if self.dl_worker and self.dl_worker.isRunning():
-            self.dl_worker.cancel()
-            self.dl_worker.wait(3000)
+        pending = [job for job in self.queue.jobs()
+                   if job.state in (jobs.WAITING, jobs.RUNNING)]
+        if pending:
+            answer = QMessageBox.question(self, t("quit_busy_title"),
+                                          tn("quit_busy_body", len(pending)))
+            if answer != QMessageBox.Yes:
+                event.ignore()
+                return
+        self.queue.close(3.0)
         event.accept()
 
 

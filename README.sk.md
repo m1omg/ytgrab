@@ -97,6 +97,30 @@ Ak ffmpeg nedokáže časť stiahnuť sám – niektoré servery to odmietnu –
 stiahne celé video a časť z neho vystrihne, takže to funguje aj tak, len
 pomalšie.
 
+## Viac naraz
+
+Sťahovania idú do zoznamu a bežia **jedno po druhom** v poradí – keď ich beží
+viac naraz, YouTube sa skôr pýta, či nie ste robot. Kým jedno beží, tlačidlo
+znie **Pridať do frontu**: vyberte ďalšie video a jeho nastavenia a počká na
+svoj rad s nastaveniami, ktoré ste mu zvolili.
+
+* **Viac odkazov:** vložte do poľa pre odkaz zoznam odkazov (každý na vlastný
+  riadok alebo oddelené medzerou), v Androide ich môžete zdieľať viac naraz.
+  Pole ukáže, koľko ich je, a **Stiahnuť N odkazov** ich všetky zaradí s
+  nastaveniami pod ním.
+* **Playlisty:** načítajte odkaz na video, ktoré je v playliste, a vyberte
+  *Len toto video* alebo *Celý playlist*. Odkaz len na playlist (alebo na
+  videá kanála) stiahne celý. Odkaz na playlist medzi viacerými odkazmi
+  takisto pridá všetky jeho videá.
+* Každé sťahovanie v zozname má vlastný priebeh a tlačidlá: **Zrušiť** to,
+  ktoré beží, **Odstrániť** to, ktoré čaká, **Skúsiť znova** po chybe,
+  **Zobraziť v priečinku** (v Androide *Otvoriť* a *Zdieľať*) po uložení.
+  **Zrušiť všetko** všetko zastaví, **Odstrániť dokončené** zoznam upratá.
+
+Keď majú nastavenia spoločné viaceré videá, rozlíšenie je strop: *1080p*
+vezme z každého videa najlepšie do 1080p. *Len časť* je pre jedno video, preto
+je pri viacerých odkazoch a celých playlistoch vypnutá.
+
 ## „Potvrďte, že nie ste robot“
 
 YouTube niekedy zastaví pripojenie, ktorému nedôveruje, a žiada prihlásenie.
@@ -135,8 +159,8 @@ možnosti aj sťahovací engine – len s obrazovkou prispôsobenou telefónu:
 
 * V aplikácii YouTube (alebo v prehliadači) video **zdieľajte** a vyberte
   ytgrab; odkaz sa vyplní a hneď načíta.
-* Sťahovanie beží ďalej aj na pozadí, s priebehom a tlačidlom *Zrušiť*
-  v upozornení.
+* Sťahovanie beží ďalej aj na pozadí, jedno po druhom, s priebehom, počtom
+  čakajúcich a tlačidlami *Zrušiť* / *Zrušiť všetko* v upozornení.
 * Hotové súbory sa uložia do priečinka **Download/ytgrab**, odkiaľ ich otvorí
   ktorýkoľvek prehrávač, správca súborov či tlačidlo *Zdieľať*.
 * Riadi sa jazykom telefónu (angličtina alebo slovenčina) a na Androide 13+

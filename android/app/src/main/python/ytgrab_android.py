@@ -57,9 +57,13 @@ def fetch_info(url):
     if not core.is_supported_url(url):
         return json.dumps({"ok": False, "error": i18n.t("invalid_link")})
     try:
-        return json.dumps({"ok": True, "info": core.fetch_info(url)})
+        info = core.fetch_info(url)
     except Exception as exc:  # noqa: BLE001 - every failure becomes a message
         return json.dumps({"ok": False, "error": core.clean_error(exc)})
+    if not info["transcripts"] and not info["video"]:
+        # A playlist whose first video has none: offer what YouTube translates into.
+        info["transcripts"] = core.common_transcripts(i18n.language())
+    return json.dumps({"ok": True, "info": info})
 
 
 def _stats(done, total, speed, eta):
@@ -84,8 +88,9 @@ def download(url, dest_dir, mode, quality, container, embed, listener, start=-1,
     listener is a Kotlin object with onProgress(json), onStage(text) and
     isCancelled(). start and end, in seconds, keep only that part of the
     video; -1 means the beginning or the end. The result is
-    {"ok": true, "path": ...}, or {"ok": false} with either
-    "cancelled": true or an "error" message.
+    {"ok": true, "path": ...}, or {"ok": false} with "cancelled": true,
+    an "error" message, or - for a link that is a playlist - "playlist",
+    whose videos the app downloads one by one instead.
     """
     section = (start, end if end >= 0 else None) if start >= 0 else None
     last = [0.0]
@@ -93,6 +98,7 @@ def download(url, dest_dir, mode, quality, container, embed, listener, start=-1,
     def on_progress(d):
         if listener.isCancelled():
             raise Cancelled()
+        title = (d.get("info_dict") or {}).get("title") or ""
         if d.get("status") == "downloading":
             now = time.monotonic()
             if now - last[0] < _PROGRESS_INTERVAL:
@@ -107,6 +113,7 @@ def download(url, dest_dir, mode, quality, container, embed, listener, start=-1,
                 "percent": percent,
                 "state": state,
                 "stats": _stats(done, total, d.get("speed") or 0, d.get("eta") or 0),
+                "title": title,
             }))
         elif d.get("status") == "finished":
             listener.onStage(i18n.t("stage_processing") + "…")
@@ -122,6 +129,8 @@ def download(url, dest_dir, mode, quality, container, embed, listener, start=-1,
                              progress_hook=on_progress, postprocessor_hook=on_postprocess,
                              section=section)
         return json.dumps({"ok": True, "path": str(path)})
+    except core.PlaylistLink as link:
+        return json.dumps({"ok": False, "playlist": link.playlist})
     except Cancelled:
         return json.dumps({"ok": False, "cancelled": True})
     except Exception as exc:  # noqa: BLE001

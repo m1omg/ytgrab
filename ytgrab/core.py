@@ -16,8 +16,9 @@ import textwrap
 import threading
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 from yt_dlp import YoutubeDL
 from yt_dlp.cookies import CookieLoadError
@@ -31,6 +32,9 @@ from .i18n import t
 
 MODES = ("video", "audio", "mp3", "transcript")
 CONTAINERS = ("mp4", "mkv")
+# Offered when the videos aren't known one by one - several links, or a
+# playlist. Each is a ceiling: "1080" takes the best up to 1080p.
+STANDARD_HEIGHTS = (2160, 1440, 1080, 720, 480, 360)
 # Transcript outputs. yt-dlp converts between srt/vtt/ass/lrc but has no plain
 # text target, so txt is produced here by parsing the subtitle file instead -
 # which also means txt needs no ffmpeg.
@@ -186,6 +190,35 @@ def is_supported_url(url):
     except ValueError:
         return False
     return parsed.scheme in ("http", "https") and bool(parsed.netloc)
+
+
+_LINK_RE = re.compile(r"https?://[^\s<>\"']+")
+
+
+def find_links(text):
+    """Every link in pasted text, once each and in order.
+
+    Links can be one per line or run together with spaces, and may sit in
+    a sentence: "Watch this: https://youtu.be/abc." gives just the link.
+    """
+    links = []
+    for match in _LINK_RE.findall(text or ""):
+        link = match.rstrip(".,;:!?)]}")
+        if link not in links and is_supported_url(link):
+            links.append(link)
+    return links
+
+
+class PlaylistLink(Exception):
+    """Raised by download() for a link that is a playlist, not one video.
+
+    playlist is what fetch_info() returns under "playlist"; the caller
+    downloads its videos one by one instead.
+    """
+
+    def __init__(self, playlist):
+        super().__init__(f"playlist of {playlist['count']} videos")
+        self.playlist = playlist
 
 
 class LoginReadError(DownloadError):
@@ -350,6 +383,10 @@ def base_opts(cookies_browser=None):
         "fragment_retries": 5,
         "concurrent_fragment_downloads": 4,
         "js_runtimes": js_runtimes(),
+        # A playlist's videos stay bare links, read only when each one's turn
+        # comes; reading them all up front takes minutes for a long list.
+        "extract_flat": "in_playlist",
+        "allow_playlist_files": False,
     }
     location = ffmpeg_location()
     if location:
@@ -582,21 +619,113 @@ def _extract(url, opts, download, work_dir=None, stopped=None, setup=None):
             _prefer_fallback_until = 0.0
         elif first is not None and _is_bot_check(first):
             _prefer_fallback_until = time.monotonic() + _PREFER_FALLBACK_SECONDS
+        if download and _links_only(info):
+            # Nothing was downloaded: its videos were left as links.
+            raise PlaylistLink(_playlist(info))
         return info
     raise default_error or first
 
 
+def _links_only(info):
+    """Whether this is a playlist whose videos are still links to read.
+
+    YouTube playlists and channels are. A post holding two videos comes
+    back already read and downloaded, as before; it isn't split up.
+    """
+    entries = [entry for entry in info.get("entries") or [] if entry]
+    return (info.get("_type") == "playlist" and bool(entries)
+            and all(entry.get("_type") in ("url", "url_transparent") for entry in entries))
+
+
+def _playlist(info):
+    """A playlist's title and its videos, as links with what's known of each."""
+    entries = []
+    for entry in info.get("entries") or []:
+        if not entry:
+            continue
+        url = entry.get("url") or entry.get("webpage_url")
+        if not is_supported_url(url):
+            url = entry.get("webpage_url")
+        if not is_supported_url(url):
+            continue
+        entries.append({"url": url, "title": entry.get("title") or "",
+                        "duration": int(entry.get("duration") or 0)})
+    if not entries:
+        raise DownloadError("No downloadable video found at that link.")
+    return {
+        "title": info.get("title") or "",
+        "uploader": info.get("uploader") or info.get("channel") or "",
+        "count": len(entries),
+        "entries": entries,
+        "thumbnails": _thumbnail_urls(info),
+    }
+
+
+def _in_playlist(url):
+    """Whether a video link also names a playlist, as YouTube's &list= does."""
+    try:
+        return bool(parse_qs(urlparse(url).query).get("list"))
+    except ValueError:
+        return False
+
+
+def _read_playlist(url, cookies_browser):
+    """The playlist a video link names, or None if it can't be read.
+
+    Private lists (Watch later, say) and ones that no longer exist end up
+    here; the video itself is still there to download.
+    """
+    opts = base_opts(cookies_browser)
+    opts.update(skip_download=True, noplaylist=False)
+    try:
+        info = _extract(url, opts, download=False)
+        return _playlist(info) if _links_only(info) else None
+    except Exception:  # noqa: BLE001 - the video is what was asked for
+        return None
+
+
 def fetch_info(url, cookies_browser=None):
-    """Read metadata without downloading. Raises DownloadError on failure."""
+    """Read metadata without downloading. Raises DownloadError on failure.
+
+    "playlist" is the playlist the link names, if it names one (see
+    _playlist()), or None. A link to a playlist alone has "video": False;
+    its title and thumbnails are the playlist's, its heights the standard
+    ceilings, and its transcript languages those of its first video.
+    """
     opts = base_opts(cookies_browser)
     opts["skip_download"] = True
-    info = _extract(url, opts, download=False)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        # The playlist a video sits in is read alongside the video itself.
+        listed = pool.submit(_read_playlist, url, cookies_browser) if _in_playlist(url) else None
+        info = _extract(url, opts, download=False)
+        playlist = listed.result() if listed else None
 
-    if info.get("_type") == "playlist":
-        entries = [e for e in (info.get("entries") or []) if e]
+    if info.get("_type") == "playlist" and not _links_only(info):
+        # Videos already read, like a post holding two: the first stands for them.
+        entries = [entry for entry in info.get("entries") or [] if entry]
         if not entries:
             raise DownloadError("No downloadable video found at that link.")
         info = entries[0]
+    elif info.get("_type") == "playlist":
+        playlist = _playlist(info)
+        first = {}
+        try:
+            first = _extract(playlist["entries"][0]["url"], opts, download=False)
+        except Exception:  # noqa: BLE001 - only its transcript list was wanted
+            pass
+        return {
+            "title": playlist["title"],
+            "uploader": playlist["uploader"],
+            "duration": 0,
+            "thumbnail": (playlist["thumbnails"] or [""])[0],
+            "thumbnails": playlist["thumbnails"] or _thumbnail_urls(first),
+            "heights": list(STANDARD_HEIGHTS),
+            "audio_codecs": [],
+            "is_live": False,
+            "transcripts": _transcripts(first),
+            "video": False,
+            "playlist": playlist,
+        }
 
     formats = info.get("formats") or []
     heights = sorted(
@@ -608,13 +737,6 @@ def fetch_info(url, cookies_browser=None):
         {f["acodec"].split(".")[0] for f in formats
          if f.get("acodec") not in (None, "none") and f.get("vcodec") in (None, "none")}
     )
-    # Manual tracks first: a human wrote them, so they read better than ASR.
-    manual = info.get("subtitles") or {}
-    automatic = info.get("automatic_captions") or {}
-    transcripts = ([{"code": c, "auto": False} for c in sorted(manual)]
-                   + [{"code": c, "auto": True} for c in sorted(automatic)
-                      if c not in manual])
-
     return {
         "title": info.get("title") or "",
         "uploader": info.get("uploader") or info.get("channel") or "",
@@ -623,9 +745,25 @@ def fetch_info(url, cookies_browser=None):
         "heights": heights,
         "audio_codecs": audio_codecs,
         "is_live": bool(info.get("is_live")),
-        "transcripts": transcripts,
+        "transcripts": _transcripts(info),
         "thumbnails": _thumbnail_urls(info),
+        "video": True,
+        "playlist": playlist,
     }
+
+
+def common_transcripts(lang):
+    """Languages to offer when the videos aren't known one by one: YouTube
+    translates its automatic captions into nearly any language."""
+    return [{"code": code, "auto": False} for code in dict.fromkeys((lang, "en"))]
+
+
+def _transcripts(info):
+    # Manual tracks first: a human wrote them, so they read better than ASR.
+    manual = info.get("subtitles") or {}
+    automatic = info.get("automatic_captions") or {}
+    return ([{"code": c, "auto": False} for c in sorted(manual)]
+            + [{"code": c, "auto": True} for c in sorted(automatic) if c not in manual])
 
 
 def _thumbnail_urls(info, limit=6):
@@ -750,7 +888,10 @@ def build_opts(out_dir, mode, quality, container="mp4", embed_thumbnail=True,
         # vtt is what YouTube serves, so asking for it avoids a conversion.
         opts["subtitlesformat"] = "vtt/srt/best"
         if container == "srt":
-            postprocessors.append({"key": "FFmpegSubtitlesConvertor", "format": "srt"})
+            # Before the download step, as --convert-subs does: with nothing
+            # but subtitles downloaded, yt-dlp skips what runs after it.
+            postprocessors.append({"key": "FFmpegSubtitlesConvertor", "format": "srt",
+                                   "when": "before_dl"})
 
     if mode != "transcript":
         postprocessors.append({"key": "FFmpegMetadata", "add_metadata": True})

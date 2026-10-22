@@ -20,14 +20,14 @@ import dev.ytgrab.app.ui.YtgrabTheme
 class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels()
 
-    // A download waiting for the storage permission (Android 7-9 only).
-    private var pending: DownloadRequest? = null
+    // Downloads waiting for the storage permission (Android 7-9 only).
+    private var pending: List<DownloadRequest>? = null
 
     private val storagePermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            val request = pending
+            val requests = pending
             pending = null
-            if (granted && request != null) startDownload(request)
+            if (granted && requests != null) enqueue(requests)
             else viewModel.message = getString(R.string.storage_permission)
         }
 
@@ -45,7 +45,10 @@ class MainActivity : ComponentActivity() {
                     viewModel = viewModel,
                     onPaste = ::paste,
                     onDownload = ::download,
-                    onCancel = { DownloadService.requestCancel(this) },
+                    onRetry = { id ->
+                        Downloads.retry(id)
+                        DownloadService.start(this)
+                    },
                     onOpen = ::open,
                     onShare = ::share,
                 )
@@ -76,11 +79,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun download() {
-        if (Downloads.isRunning) {
-            Toast.makeText(this, R.string.busy, Toast.LENGTH_SHORT).show()
-            return
-        }
-        val request = viewModel.request() ?: return
+        val requests = viewModel.requests() ?: return
         viewModel.message = null
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             !granted(Manifest.permission.POST_NOTIFICATIONS)
@@ -90,16 +89,22 @@ class MainActivity : ComponentActivity() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q &&
             !granted(Manifest.permission.WRITE_EXTERNAL_STORAGE)
         ) {
-            pending = request
+            pending = requests
             storagePermission.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
             return
         }
-        startDownload(request)
+        enqueue(requests)
     }
 
-    private fun startDownload(request: DownloadRequest) {
-        val intent = request.putInto(Intent(this, DownloadService::class.java).setAction(DownloadService.ACTION_START))
-        ContextCompat.startForegroundService(this, intent)
+    /** Join the queue; the service starts on it, or carries on with it. */
+    private fun enqueue(requests: List<DownloadRequest>) {
+        val wasBusy = Downloads.busy
+        Downloads.add(requests)
+        DownloadService.start(this)
+        if (wasBusy || requests.size > 1) {
+            val text = resources.getQuantityString(R.plurals.queued_n, requests.size, requests.size)
+            Toast.makeText(this, text, Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun granted(permission: String) =

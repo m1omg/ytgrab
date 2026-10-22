@@ -13,6 +13,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
@@ -20,6 +21,10 @@ import java.net.URL
 enum class Mode(val key: String) { VIDEO("video"), AUDIO("audio"), MP3("mp3"), TRANSCRIPT("transcript") }
 
 data class Transcript(val code: String, val auto: Boolean)
+
+data class PlaylistEntry(val url: String, val title: String)
+
+data class Playlist(val title: String, val uploader: String, val entries: List<PlaylistEntry>)
 
 data class VideoInfo(
     val title: String,
@@ -31,27 +36,57 @@ data class VideoInfo(
     val heights: List<Int>,
     val isLive: Boolean,
     val transcripts: List<Transcript>,
+    /** False for a link to a playlist alone; the details are then the playlist's. */
+    val video: Boolean,
+    /** The playlist the link names, if it names one. */
+    val playlist: Playlist?,
 ) {
     companion object {
+        private fun strings(array: JSONArray?) = array?.let { list -> List(list.length()) { list.getString(it) } }.orEmpty()
+
         fun from(json: JSONObject): VideoInfo {
             val heights = json.getJSONArray("heights")
             val tracks = json.getJSONArray("transcripts")
-            val thumbs = json.optJSONArray("thumbnails")
+            val list = json.optJSONObject("playlist")
             return VideoInfo(
                 title = json.optString("title"),
                 uploader = json.optString("uploader"),
                 duration = json.optInt("duration"),
                 thumbnail = json.optString("thumbnail"),
-                thumbnails = thumbs?.let { list -> List(list.length()) { list.getString(it) } }.orEmpty(),
+                thumbnails = strings(json.optJSONArray("thumbnails")),
                 heights = List(heights.length()) { heights.getInt(it) },
                 isLive = json.optBoolean("is_live"),
                 transcripts = List(tracks.length()) {
                     val t = tracks.getJSONObject(it)
                     Transcript(t.getString("code"), t.optBoolean("auto"))
                 },
+                video = json.optBoolean("video", true),
+                playlist = list?.let {
+                    val entries = it.getJSONArray("entries")
+                    Playlist(
+                        title = it.optString("title"),
+                        uploader = it.optString("uploader"),
+                        entries = List(entries.length()) { i ->
+                            val entry = entries.getJSONObject(i)
+                            PlaylistEntry(entry.getString("url"), entry.optString("title"))
+                        },
+                    )
+                },
             )
         }
     }
+}
+
+/** The same rules as find_links() in ytgrab/core.py. */
+object Links {
+    private val LINK = Regex("""https?://[^\s<>"']+""")
+
+    /** Every link in shared or pasted text, once each and in order. */
+    fun find(text: String): List<String> =
+        LINK.findAll(text).map { it.value.trimEnd('.', ',', ';', ':', '!', '?', ')', ']', '}') }.distinct().toList()
+
+    /** Offered when the videos aren't known one by one; each is a ceiling. */
+    val STANDARD_HEIGHTS = listOf(2160, 1440, 1080, 720, 480, 360)
 }
 
 class MainViewModel(app: Application) : AndroidViewModel(app) {
@@ -78,6 +113,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     var partFrom by mutableStateOf("")
     var partTo by mutableStateOf("")
 
+    /** For a video in a playlist: take the whole list rather than the video. */
+    var wholePlaylist by mutableStateOf(false)
+
+    // The link the details on screen were read from.
+    private var infoUrl by mutableStateOf("")
+
     private var fetchJob: Job? = null
 
     init {
@@ -85,22 +126,38 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { runCatching { Engine.warmUp(getApplication()) } }
     }
 
-    /** A shared "Watch this: https://youtu.be/..." becomes just the link. */
+    /** The links in the box when there are several; empty for one or none. */
+    val links: List<String>
+        get() = Links.find(url).takeIf { it.size > 1 }.orEmpty()
+
+    /** The details read for the link in the box, if they're for that link. */
+    val shown: VideoInfo?
+        get() = info?.takeIf { links.isEmpty() && infoUrl == singleLink() }
+
+    private fun singleLink(): String = Links.find(url).firstOrNull() ?: url.trim()
+
+    /** A shared "Watch this: https://youtu.be/..." becomes just the link; several links stay together. */
     fun onShared(text: String) {
-        url = LINK.find(text)?.value ?: text.trim()
+        val found = Links.find(text)
+        if (found.size > 1) {
+            url = found.joinToString(" ")
+            message = null
+            return
+        }
+        url = found.firstOrNull() ?: text.trim()
         fetch()
     }
 
     fun fetch() {
-        val link = url.trim()
-        if (link.isEmpty() || fetchJob?.isActive == true) return
+        val link = singleLink()
+        if (link.isEmpty() || links.isNotEmpty() || fetchJob?.isActive == true) return
         fetching = true
         message = null
         fetchJob = viewModelScope.launch {
             try {
                 val result = Engine.fetchInfo(getApplication(), link)
                 if (result.optBoolean("ok")) {
-                    show(VideoInfo.from(result.getJSONObject("info")))
+                    show(link, VideoInfo.from(result.getJSONObject("info")))
                 } else {
                     message = result.optString("error")
                 }
@@ -112,11 +169,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private fun show(video: VideoInfo) {
+    private fun show(link: String, video: VideoInfo) {
         info = video
+        infoUrl = link
         thumbnail = null
-        // Times typed for one video rarely fit the next, so it starts whole.
+        // Times typed for one video rarely fit the next, so it starts whole;
+        // the link names this video, so the list is the option.
         partOn = false
+        wholePlaylist = false
         if (height != "best" && height.toIntOrNull() !in video.heights) height = "best"
         transcriptLang = defaultTranscript(video.transcripts)
         val candidates = video.thumbnails.ifEmpty { listOf(video.thumbnail) }.filter { it.isNotEmpty() }
@@ -138,33 +198,68 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         return tracks.firstOrNull()?.code
     }
 
-    /** Whether "Only a part" can be offered: it needs the video's details, and no live stream. */
+    /** Whether Download takes the playlist the link names rather than one video. */
+    val takesPlaylist: Boolean
+        get() {
+            val video = shown ?: return false
+            return video.playlist != null && (!video.video || wholePlaylist)
+        }
+
+    /** How many downloads the button adds: several links, a playlist, or one. */
+    val count: Int
+        get() = when {
+            links.isNotEmpty() -> links.size
+            takesPlaylist -> shown?.playlist?.entries?.size ?: 1
+            else -> 1
+        }
+
+    /** Resolutions to offer: the video's own, or the standard ceilings for several. */
+    val heights: List<Int>
+        get() = if (links.isNotEmpty()) Links.STANDARD_HEIGHTS else shown?.heights.orEmpty()
+
+    /** Transcript languages to offer; several links get the interface language and English. */
+    val transcripts: List<Transcript>?
+        get() = if (links.isNotEmpty()) {
+            listOf(Engine.language(getApplication()), "en").distinct().map { Transcript(it, false) }
+        } else {
+            shown?.transcripts
+        }
+
+    /** Whether "Only a part" can be offered: one read video that isn't live. */
     val partAvailable: Boolean
-        get() = info?.isLive == false && mode != Mode.TRANSCRIPT
+        get() = shown?.isLive == false && mode != Mode.TRANSCRIPT && !takesPlaylist
 
     /** What the part fields come to, or null while the whole video is wanted. */
     fun partCheck(): PartCheck? {
-        val video = info ?: return null
+        val video = shown ?: return null
         if (!partOn || !partAvailable) return null
         return Parts.check(partFrom, partTo, video.duration)
     }
 
-    /** What the Download button should fetch, or null if something is missing. */
-    fun request(): DownloadRequest? {
-        val link = url.trim().takeIf { it.isNotEmpty() } ?: return null
-        val title = info?.title?.takeIf { it.isNotEmpty() } ?: link
+    /** What the Download button should queue, or null if something is missing. */
+    fun requests(): List<DownloadRequest>? {
+        val link = singleLink().takeIf { it.isNotEmpty() } ?: return null
+        val title = shown?.takeIf { it.video }?.title.orEmpty()
         val part = when (val check = partCheck()) {
             null -> null
             is PartCheck.Valid -> check.part
             else -> return null  // the fields say what's wrong
         }
-        return when (mode) {
+        val one = when (mode) {
             Mode.VIDEO -> DownloadRequest(link, title, "video", height, container, embed, part)
             Mode.AUDIO -> DownloadRequest(link, title, "audio", audioStream, "mp4", embed, part)
             Mode.MP3 -> DownloadRequest(link, title, "mp3", bitrate, "mp4", embed, part)
-            Mode.TRANSCRIPT -> transcriptLang?.let {
-                DownloadRequest(link, title, "transcript", it, transcriptFormat, false)
+            Mode.TRANSCRIPT -> {
+                val offered = transcripts.orEmpty()
+                val lang = transcriptLang?.takeIf { code -> offered.any { it.code == code } }
+                    ?: defaultTranscript(offered) ?: return null
+                DownloadRequest(link, title, "transcript", lang, transcriptFormat, false)
             }
+        }
+        return when {
+            links.isNotEmpty() -> links.map { one.copy(url = it, title = "") }
+            takesPlaylist -> shown?.playlist?.entries?.map { one.copy(url = it.url, title = it.title) }
+            else -> listOf(one)
         }
     }
 
@@ -175,9 +270,5 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             connection.readTimeout = 15_000
             connection.inputStream.use { BitmapFactory.decodeStream(it)?.asImageBitmap() }
         }.getOrNull()
-    }
-
-    companion object {
-        private val LINK = Regex("""https?://\S+""")
     }
 }
