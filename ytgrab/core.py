@@ -624,7 +624,44 @@ def fetch_info(url, cookies_browser=None):
         "audio_codecs": audio_codecs,
         "is_live": bool(info.get("is_live")),
         "transcripts": transcripts,
+        "thumbnails": _thumbnail_urls(info),
     }
+
+
+def _thumbnail_urls(info, limit=6):
+    """The thumbnail yt-dlp picked, then the others from best to worst.
+
+    The best-ranked ones don't always exist - YouTube has no maxresdefault
+    for most videos under 720p - so whoever shows one tries them in turn.
+    """
+    picked = [info.get("thumbnail")]
+    ranked = [thumb.get("url") for thumb in reversed(info.get("thumbnails") or [])]
+    urls = []
+    for url in picked + ranked:
+        if url and url not in urls and is_supported_url(url):
+            urls.append(url)
+    return urls[:limit]
+
+
+def fetch_image(urls, accept=None, max_bytes=8 * 1024 * 1024):
+    """The first of urls that downloads (and that accept() takes), or None.
+
+    It goes through yt-dlp, so it trusts the same certificates as the
+    downloads do: a frozen build's own OpenSSL looks for the system's where
+    Debian keeps them, which Fedora, Arch and others don't.
+    """
+    with YoutubeDL({"quiet": True, "no_warnings": True, "socket_timeout": 15}) as ydl:
+        for url in urls:
+            if not is_supported_url(url):
+                continue
+            try:
+                with ydl.urlopen(url) as response:
+                    data = response.read(max_bytes)
+            except Exception:  # noqa: BLE001 - a missing thumbnail is not an error
+                continue
+            if data and (accept is None or accept(data)):
+                return data
+    return None
 
 
 def build_opts(out_dir, mode, quality, container="mp4", embed_thumbnail=True,
