@@ -1,24 +1,28 @@
 package dev.ytgrab.app
 
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
 import android.os.SystemClock
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
 /**
- * Runs one download as a foreground service, so it carries on while the user
- * goes back to YouTube or turns the screen off.
+ * Works through the download queue as a foreground service, one item at a
+ * time, so downloads carry on while the user goes back to YouTube or turns
+ * the screen off.
  */
 class DownloadService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -30,60 +34,76 @@ class DownloadService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            ACTION_START -> DownloadRequest.from(intent)?.let(::start)
-            ACTION_CANCEL -> requestCancel(this)
+            ACTION_START -> start()
+            ACTION_CANCEL -> Downloads.cancelRunning()
+            ACTION_CANCEL_ALL -> Downloads.cancelAll()
         }
         if (job?.isActive != true) stopSelf()
         return START_NOT_STICKY
     }
 
-    private fun start(request: DownloadRequest) {
-        if (job?.isActive == true) return
-        Downloads.cancelRequested.set(false)
-        val first = DownloadStatus.Running(request.title, getString(R.string.starting))
-        Downloads.status.value = first
-        val notification = Notifications.progress(this, first)
+    private fun start() {
+        // Every startForegroundService() wants a startForeground(), even while
+        // the queue is already being worked through.
+        val running = Downloads.queue.value.firstOrNull { it.state == ItemState.RUNNING }
+        val notification = Notifications.progress(this, running, waiting())
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(Notifications.PROGRESS_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
         } else {
             startForeground(Notifications.PROGRESS_ID, notification)
         }
-        // Keep the CPU awake with the screen off; released when the download ends.
-        wakeLock = (getSystemService(POWER_SERVICE) as PowerManager)
-            .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "ytgrab:download")
-            .apply { acquire(4 * 60 * 60 * 1000L) }
+        if (job?.isActive == true) return
 
+        Downloads.stopAll.set(false)
+        // Keep the CPU awake with the screen off; released when the queue is done.
+        val lock = (getSystemService(POWER_SERVICE) as PowerManager)
+            .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "ytgrab:download")
+            .apply { setReferenceCounted(false) }
+        wakeLock = lock
         job = scope.launch {
-            val result = try {
-                run(request)
-            } catch (e: Exception) {
-                DownloadStatus.Failed(request.title, e.localizedMessage ?: e.toString())
+            val finished = mutableListOf<QueueItem>()
+            while (true) {
+                val item = Downloads.takeNext() ?: break
+                lock.acquire(4 * 60 * 60 * 1000L)  // each download gets the full allowance
+                try {
+                    run(item)
+                } catch (e: Exception) {
+                    Downloads.update(item.id) {
+                        it.copy(state = ItemState.FAILED, error = e.localizedMessage ?: e.toString())
+                    }
+                }
+                Downloads.queue.value.firstOrNull { it.id == item.id }?.takeIf { it.finished }?.let(finished::add)
             }
-            Downloads.status.value = result
-            Notifications.result(this@DownloadService, result)
-            wakeLock?.takeIf { it.isHeld }?.release()
+            Notifications.result(this@DownloadService, finished)
+            lock.takeIf { it.isHeld }?.release()
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
         }
     }
 
-    private suspend fun run(request: DownloadRequest): DownloadStatus {
+    private suspend fun run(item: QueueItem) {
+        publish(item.id, force = true) { it.copy(progress = getString(R.string.starting)) }
         val work = File(cacheDir, "downloads").apply { mkdirs() }
         val listener = DownloadListener(
+            itemId = item.id,
             progress = { json ->
-                publish(
-                    DownloadStatus.Running(
-                        request.title, json.getString("state"), json.getString("stats"),
-                        json.getDouble("percent").toFloat(),
+                publish(item.id) {
+                    it.copy(
+                        title = it.title.ifEmpty { json.optString("title") },
+                        progress = json.getString("state"),
+                        stats = json.getString("stats"),
+                        percent = json.getDouble("percent").toFloat(),
                     )
-                )
+                }
             },
-            stage = { text -> publish(DownloadStatus.Running(request.title, text)) },
+            stage = { text -> publish(item.id) { it.copy(progress = text, stats = "", percent = -1f) } },
         )
-        val result = Engine.download(this, request, work, listener)
-        return when {
+        val result = Engine.download(this, item.request, work, listener)
+        when {
             result.optBoolean("ok") -> {
-                publish(DownloadStatus.Running(request.title, getString(R.string.saving)), force = true)
+                publish(item.id, force = true) {
+                    it.copy(progress = getString(R.string.saving), stats = "", percent = -1f)
+                }
                 val file = File(result.getString("path"))
                 val saved = withContext(Dispatchers.IO) {
                     try {
@@ -92,26 +112,45 @@ class DownloadService : Service() {
                         file.delete()
                     }
                 }
-                DownloadStatus.Done(request.title, saved)
+                Downloads.update(item.id) {
+                    it.copy(state = ItemState.DONE, file = saved, title = it.title.ifEmpty { file.nameWithoutExtension })
+                }
             }
-            result.optBoolean("cancelled") -> DownloadStatus.Cancelled(request.title)
-            else -> DownloadStatus.Failed(request.title, result.optString("error"))
+            result.has("playlist") -> {
+                val entries = result.getJSONObject("playlist").getJSONArray("entries")
+                Downloads.expand(
+                    item.id,
+                    List(entries.length()) {
+                        val entry = entries.getJSONObject(it)
+                        entry.getString("url") to entry.optString("title")
+                    },
+                    getString(R.string.playlist_empty),
+                )
+            }
+            result.optBoolean("cancelled") -> Downloads.update(item.id) { it.copy(state = ItemState.CANCELLED) }
+            else -> Downloads.update(item.id) { it.copy(state = ItemState.FAILED, error = result.optString("error")) }
         }
     }
 
-    private fun publish(status: DownloadStatus.Running, force: Boolean = false) {
-        if (Downloads.cancelRequested.get()) return  // "Cancelling…" stays up
-        Downloads.status.value = status
+    private fun waiting() = Downloads.queue.value.count { it.state == ItemState.WAITING }
+
+    /** Update a running item, and its notification at most once a second. */
+    private fun publish(id: Long, force: Boolean = false, change: (QueueItem) -> QueueItem) {
+        Downloads.update(id) { if (it.cancelling) it else change(it) }  // "Cancelling…" stays up
         // Android drops notification updates that come too often.
         val now = SystemClock.elapsedRealtime()
         if (force || now - lastNotified >= 1000) {
             lastNotified = now
-            Notifications.update(this, status)
+            Downloads.queue.value.firstOrNull { it.id == id }?.let { Notifications.update(this, it, waiting()) }
         }
     }
 
     override fun onDestroy() {
-        Downloads.cancelRequested.set(true)
+        Downloads.stopAll.set(true)
+        // A download the system cut short can be tried again from the list.
+        Downloads.queue.update { list ->
+            list.map { if (it.state == ItemState.RUNNING) it.copy(state = ItemState.CANCELLED) else it }
+        }
         wakeLock?.takeIf { it.isHeld }?.release()
         scope.cancel()
         super.onDestroy()
@@ -120,13 +159,13 @@ class DownloadService : Service() {
     companion object {
         const val ACTION_START = "dev.ytgrab.app.START"
         const val ACTION_CANCEL = "dev.ytgrab.app.CANCEL"
+        const val ACTION_CANCEL_ALL = "dev.ytgrab.app.CANCEL_ALL"
 
-        fun requestCancel(context: android.content.Context) {
-            val current = Downloads.status.value as? DownloadStatus.Running ?: return
-            Downloads.cancelRequested.set(true)
-            val cancelling = current.copy(state = context.getString(R.string.cancelling), stats = "", percent = -1f)
-            Downloads.status.value = cancelling
-            Notifications.update(context, cancelling)
+        /** Start working through the queue, or carry on if it already is. */
+        fun start(context: Context) {
+            ContextCompat.startForegroundService(
+                context, Intent(context, DownloadService::class.java).setAction(ACTION_START),
+            )
         }
     }
 }

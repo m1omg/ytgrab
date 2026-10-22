@@ -32,12 +32,12 @@
     border-radius: 14px; padding: 20px; margin-bottom: 16px;
   }
   .row { display: flex; gap: 10px; }
-  input[type=url] {
-    flex: 1; padding: 12px 14px; border-radius: 10px;
+  input.link {
+    flex: 1; min-width: 0; padding: 12px 14px; border-radius: 10px;
     border: 1px solid var(--line); background: var(--panel-2);
     color: var(--text); font-size: 15px; outline: none;
   }
-  input[type=url]:focus { border-color: var(--accent); }
+  input.link:focus { border-color: var(--accent); }
   button {
     padding: 12px 18px; border-radius: 10px; border: 1px solid var(--line);
     background: var(--panel-2); color: var(--text);
@@ -50,12 +50,18 @@
     color: #fff; width: 100%; margin-top: 18px; padding: 14px;
   }
   button.primary:hover:not(:disabled) { background: #ff6060; }
+  button.small { padding: 6px 12px; font-size: 13px; border-radius: 8px; }
   .hidden { display: none !important; }
 
   .meta { display: flex; gap: 14px; align-items: flex-start; }
   .meta img { width: 140px; border-radius: 8px; flex-shrink: 0; }
-  .meta .t { font-weight: 600; margin-bottom: 4px; }
+  .meta > div { min-width: 0; flex: 1; }
+  .meta .t { font-weight: 600; margin-bottom: 4px; overflow-wrap: anywhere; }
   .meta .m { color: var(--muted); font-size: 13px; }
+  .choice { margin-top: 10px; font-size: 14px; }
+  .choice label { display: flex; align-items: center; gap: 8px; margin-top: 4px; cursor: pointer; }
+  .choice input { accent-color: var(--accent); }
+  .choice .name { color: var(--muted); font-size: 13px; margin-left: 24px; overflow-wrap: anywhere; }
 
   .modes { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
   .mode {
@@ -74,6 +80,7 @@
   }
   .check { display: flex; align-items: center; gap: 8px; margin-top: 16px; font-size: 14px; }
   .check input { width: 16px; height: 16px; accent-color: var(--accent); }
+  .check.off { opacity: 0.5; }
   .times { display: flex; gap: 10px; }
   .times label.field { flex: 1; margin-top: 10px; }
   input.time {
@@ -84,17 +91,25 @@
   input.time:focus { border-color: var(--accent); }
   .hint { color: var(--muted); font-size: 12.5px; margin-top: 8px; }
 
-  .bar { height: 8px; background: var(--panel-2); border-radius: 99px; overflow: hidden; }
+  .bar { height: 6px; background: var(--panel-2); border-radius: 99px; overflow: hidden; margin-top: 8px; }
   .bar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .25s; }
   .bar.indet > i { width: 40%; animation: slide 1.1s ease-in-out infinite; }
   @keyframes slide { 0% { margin-left: -40%; } 100% { margin-left: 100%; } }
-  .status { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); margin-bottom: 8px; }
-  .err { color: var(--accent); font-size: 14px; white-space: pre-wrap; }
-  .done { color: var(--ok); font-weight: 600; }
-  a.dl {
-    display: block; text-align: center; margin-top: 14px; padding: 14px;
-    background: var(--ok); color: #06210f; border-radius: 10px;
-    font-weight: 600; text-decoration: none;
+  .err { color: var(--accent); font-size: 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+  .qhead { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+  .qhead b { font-size: 16px; }
+  .qhead .count { color: var(--muted); font-size: 13px; flex: 1; }
+  .job { border-top: 1px solid var(--line); padding: 10px 0; }
+  .job:first-of-type { border-top: 0; }
+  .job .top { display: flex; gap: 10px; align-items: center; }
+  .job .name { flex: 1; min-width: 0; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .job .acts { display: flex; gap: 6px; flex-shrink: 0; }
+  .job .detail { color: var(--muted); font-size: 13px; }
+  .job .err { font-size: 13px; margin-top: 4px; }
+  a.save {
+    padding: 6px 12px; font-size: 13px; border-radius: 8px; font-weight: 600;
+    background: var(--ok); color: #06210f; text-decoration: none;
   }
   .foot { color: var(--muted); font-size: 12px; text-align: center; margin-top: 24px; }
   .foot a { color: var(--muted); }
@@ -110,7 +125,8 @@
 
   <div class="card">
     <div class="row">
-      <input id="url" type="url" placeholder="https://www.youtube.com/watch?v=..." autofocus>
+      <input id="url" class="link" type="text" inputmode="url" autocomplete="off" spellcheck="false"
+             placeholder="https://www.youtube.com/watch?v=..." autofocus>
       <button id="fetch">{{ t.fetch }}</button>
     </div>
     <div id="infoErr" class="err hidden" style="margin-top:12px"></div>
@@ -121,6 +137,11 @@
     <div>
       <div class="t" id="title"></div>
       <div class="m" id="submeta"></div>
+      <div id="choice" class="choice hidden">
+        <label><input type="radio" name="scope" id="scopeThis" checked> <span>{{ t.playlist_this }}</span></label>
+        <label><input type="radio" name="scope" id="scopeWhole"> <span id="wholeTxt"></span></label>
+        <div class="name" id="playlistName"></div>
+      </div>
     </div>
   </div>
 
@@ -183,7 +204,7 @@
     </label>
 
     <div id="partRow">
-      <label class="check" title="{{ t.part_check_tip }}">
+      <label class="check" id="partLabel" title="{{ t.part_check_tip }}">
         <input type="checkbox" id="part"> {{ t.part_check }}
       </label>
       <div id="partFields" class="hidden">
@@ -200,13 +221,17 @@
     </div>
 
     <button class="primary" id="go">{{ t.download }}</button>
+    <div id="goErr" class="err hidden" style="margin-top:12px"></div>
   </div>
 
-  <div id="prog" class="card hidden">
-    <div class="status"><span id="stateTxt">{{ t.starting }}</span><span id="statNums"></span></div>
-    <div class="bar" id="bar"><i id="fill"></i></div>
-    <div id="progErr" class="err hidden" style="margin-top:12px"></div>
-    <a id="dl" class="dl hidden">{{ t.web_save_file }}</a>
+  <div id="queue" class="card hidden">
+    <div class="qhead">
+      <b>{{ t.queue_title }}</b>
+      <span class="count" id="qcount"></span>
+      <button class="small hidden" id="cancelAll">{{ t.queue_cancel_all }}</button>
+      <button class="small hidden" id="clearDone">{{ t.queue_clear }}</button>
+    </div>
+    <div id="jobs"></div>
   </div>
 
   <div class="foot">
@@ -219,26 +244,35 @@
 
 <script>
 const T = {{ t | tojson }};
+const HEIGHTS = {{ heights | list | tojson }};
+const LANG = document.documentElement.lang;
 const $ = id => document.getElementById(id);
 let mode = "video";
+let info = null;     // the video or playlist last read
+let links = [];      // the links in the box, when there are several
 let poll = null;
-let duration = 0;    // of the video last read, to check the part against
+let busy = false;    // whether the queue has anything running or waiting
 
-// Slovak writes 1,5 MB where English writes 1.5 MB.
-function num(value, digits) {
-  return value.toFixed(digits).replace(".", T.decimal_separator);
-}
 function fill(template, fields) {
   return template.replace(/\{(\w+)\}/g, (_, key) => fields[key]);
 }
-
-function fmtSize(b) {
-  if (!b) return "";
-  const u = ["B", "KB", "MB", "GB"];
-  let i = 0;
-  while (b >= 1024 && i < u.length - 1) { b /= 1024; i++; }
-  return num(b, i ? 1 : 0) + " " + u[i];
+// Counted strings hold a form per plural: English 1 / more, Slovak 1 / 2-4 / 5+.
+function plural(key, count, fields) {
+  const forms = T[key];
+  const i = LANG === "sk" ? (count === 1 ? 0 : count >= 2 && count <= 4 ? 1 : 2)
+                          : (count === 1 ? 0 : 1);
+  return fill(forms[Math.min(i, forms.length - 1)], Object.assign({ count }, fields || {}));
 }
+// The same rule as find_links() in ytgrab/core.py.
+function findLinks(text) {
+  const found = [];
+  for (let m of text.match(/https?:\/\/[^\s<>"']+/g) || []) {
+    m = m.replace(/[.,;:!?)\]}]+$/, "");
+    if (!found.includes(m)) found.push(m);
+  }
+  return found;
+}
+
 // The best-ranked thumbnail doesn't always exist; the others are tried in turn.
 function showThumb(urls) {
   const img = $("thumb");
@@ -257,6 +291,59 @@ function fmtDur(s) {
   return (h ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(x).padStart(2, "0");
 }
 
+function fillSelect(sel, items, keep) {
+  const previous = keep ? sel.value : null;
+  sel.innerHTML = "";
+  items.forEach(([value, text]) => {
+    const o = document.createElement("option");
+    o.value = value;
+    o.textContent = text;
+    sel.appendChild(o);
+  });
+  if (previous !== null && items.some(([v]) => String(v) === previous)) sel.value = previous;
+}
+function fillHeights(heights) {
+  fillSelect($("res"), [["best", T.best_available]].concat(heights.map(h => [h, h + "p"])), true);
+}
+function fillTranscripts(tracks) {
+  const tl = $("tlang");
+  if (!tracks.length) {
+    fillSelect(tl, [["", T.transcript_none]]);
+    return;
+  }
+  fillSelect(tl, tracks.map(s => [s.code, s.auto ? fill(T.transcript_auto, { code: s.code }) : s.code]));
+  // Prefer the page language, then English, then whatever came first.
+  const want = [LANG, "en"].find(l => [...tl.options].some(o => o.value.split("-")[0] === l));
+  if (want) tl.value = [...tl.options].find(o => o.value.split("-")[0] === want).value;
+}
+
+function wholePlaylist() {
+  return !links.length && !!info && !!info.playlist && (!info.video || $("scopeWhole").checked);
+}
+function several() {
+  return links.length > 1 || wholePlaylist();
+}
+
+// A part is cut from one video, and never from a live stream.
+function syncPart() {
+  const live = !!(info && info.is_live);
+  const off = live || several();
+  if (off) $("part").checked = false;
+  $("part").disabled = off;
+  $("partLabel").classList.toggle("off", off);
+  $("partLabel").title = live ? T.part_live : several() ? T.part_one_video : T.part_check_tip;
+  $("partFields").classList.toggle("hidden", !$("part").checked);
+  $("partTo").placeholder = info && !several() ? fmtDur(info.duration) : "";
+}
+
+function syncButton() {
+  let text;
+  if (links.length > 1) text = plural(busy ? "queue_add_links" : "download_links", links.length);
+  else if (wholePlaylist()) text = plural(busy ? "queue_add_n" : "download_n", info.playlist.count);
+  else text = busy ? T.queue_add : T.download;
+  $("go").textContent = text;
+}
+
 document.querySelectorAll(".mode").forEach(el => {
   el.onclick = () => {
     document.querySelectorAll(".mode").forEach(m => m.classList.remove("active"));
@@ -272,10 +359,38 @@ document.querySelectorAll(".mode").forEach(el => {
   };
 });
 
-$("part").onchange = () => $("partFields").classList.toggle("hidden", !$("part").checked);
+$("part").onchange = syncPart;
+$("scopeThis").onchange = $("scopeWhole").onchange = () => { syncPart(); syncButton(); };
+
+// Several links show as a batch at once; a single one waits for Fetch.
+$("url").addEventListener("input", () => {
+  const found = findLinks($("url").value);
+  const now = found.length > 1 ? found : [];
+  if (now.join(" ") === links.join(" ") && !info) return;
+  info = null;
+  links = now;
+  $("fetch").disabled = links.length > 1;
+  $("fetch").title = links.length > 1 ? T.read_one_link : "";
+  if (links.length > 1) {
+    $("thumb").classList.add("hidden");
+    $("title").textContent = plural("batch_title", links.length);
+    $("submeta").textContent = T.batch_note;
+    $("choice").classList.add("hidden");
+    $("info").classList.remove("hidden");
+    fillHeights(HEIGHTS);
+    fillTranscripts([...new Set([LANG, "en"])].map(code => ({ code, auto: false })));
+    $("opts").classList.remove("hidden");
+  } else {
+    $("info").classList.add("hidden");
+  }
+  syncPart();
+  syncButton();
+});
 
 async function fetchInfo() {
-  const url = $("url").value.trim();
+  const found = findLinks($("url").value);
+  if (found.length > 1) return;
+  const url = found[0] || $("url").value.trim();
   if (!url) return;
   $("fetch").disabled = true;
   $("fetch").textContent = "…";
@@ -288,54 +403,37 @@ async function fetchInfo() {
     });
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || T.read_failed);
+    info = d;
+    links = [];
 
     showThumb((d.thumbnails || []).length ? d.thumbnails : [d.thumbnail].filter(Boolean));
     $("title").textContent = d.title || "";
-    $("submeta").textContent = [d.uploader, fmtDur(d.duration), d.is_live ? T.live : ""]
-      .filter(Boolean).join(" · ");
-    $("info").classList.remove("hidden");
-    duration = d.duration || 0;
-    $("partTo").placeholder = fmtDur(duration);
-    // A part can't be cut from a live stream; and a new video starts whole.
-    $("part").checked = false;
-    $("part").disabled = !!d.is_live;
-    $("part").parentElement.title = d.is_live ? T.part_live : T.part_check_tip;
-    $("partFields").classList.add("hidden");
-
-    const res = $("res");
-    res.innerHTML = '<option value="best"></option>';
-    res.firstChild.textContent = T.best_available;
-    (d.heights || []).forEach(h => {
-      const o = document.createElement("option");
-      o.value = h;
-      o.textContent = h + "p";
-      res.appendChild(o);
-    });
-    const tl = $("tlang");
-    tl.innerHTML = "";
-    (d.transcripts || []).forEach(s => {
-      const o = document.createElement("option");
-      o.value = s.code;
-      o.textContent = s.auto ? fill(T.transcript_auto, { code: s.code }) : s.code;
-      tl.appendChild(o);
-    });
-    if (!tl.options.length) {
-      const o = document.createElement("option");
-      o.value = "";
-      o.textContent = T.transcript_none;
-      tl.appendChild(o);
-    } else {
-      // Prefer the page language, then English, then whatever came first.
-      const want = [document.documentElement.lang, "en"]
-        .find(l => [...tl.options].some(o => o.value.split("-")[0] === l));
-      if (want) tl.value = [...tl.options].find(o => o.value.split("-")[0] === want).value;
+    const bits = d.video
+      ? [d.uploader, fmtDur(d.duration), d.is_live ? T.live : ""]
+      : [T.playlist_label, d.uploader, plural("playlist_videos", d.playlist.count)];
+    $("submeta").textContent = bits.filter(Boolean).join(" · ");
+    // A video in a playlist: that video, or the whole list.
+    const offer = !!(d.playlist && d.video);
+    $("choice").classList.toggle("hidden", !offer);
+    $("scopeThis").checked = true;
+    if (offer) {
+      $("wholeTxt").textContent = plural("playlist_whole", d.playlist.count);
+      $("playlistName").textContent = d.playlist.title ? fill(T.playlist_name, { title: d.playlist.title }) : "";
     }
+    $("info").classList.remove("hidden");
+    // A new video starts whole.
+    $("part").checked = false;
+    syncPart();
+    syncButton();
+
+    fillHeights(d.heights || []);
+    fillTranscripts(d.transcripts || []);
     $("opts").classList.remove("hidden");
   } catch (e) {
     $("infoErr").textContent = e.message;
     $("infoErr").classList.remove("hidden");
   } finally {
-    $("fetch").disabled = false;
+    $("fetch").disabled = links.length > 1;
     $("fetch").textContent = T.fetch;
   }
 }
@@ -349,25 +447,25 @@ $("go").onclick = async () => {
                 : mode === "transcript" ? $("tlang").value
                 : $("bitrate").value;
   const body = {
-    url: $("url").value.trim(),
     mode,
     quality,
     // In transcript mode this field carries the subtitle format.
     container: mode === "transcript" ? $("tfmt").value : $("container").value,
     embed_thumbnail: $("embed").checked
   };
-  if (mode !== "transcript" && $("part").checked) {
-    body.part = { start: $("partFrom").value, end: $("partTo").value };
-    body.duration = duration;
+  if (links.length > 1) {
+    body.urls = links;
+  } else if (wholePlaylist()) {
+    body.items = info.playlist.entries.map(e => ({ url: e.url, title: e.title }));
+  } else {
+    body.url = findLinks($("url").value)[0] || $("url").value.trim();
+    if (info && info.video) body.title = info.title;
   }
-  $("go").disabled = true;
-  $("prog").classList.remove("hidden");
-  $("progErr").classList.add("hidden");
-  $("dl").classList.add("hidden");
-  $("fill").style.width = "0";
-  $("stateTxt").textContent = T.starting;
-  $("statNums").textContent = "";
-
+  if (mode !== "transcript" && $("part").checked && !several()) {
+    body.part = { start: $("partFrom").value, end: $("partTo").value };
+    body.duration = info ? info.duration : 0;
+  }
+  $("goErr").classList.add("hidden");
   const r = await fetch("/api/download", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -375,57 +473,108 @@ $("go").onclick = async () => {
   });
   const d = await r.json();
   if (!r.ok) {
-    $("progErr").textContent = d.error;
-    $("progErr").classList.remove("hidden");
-    $("go").disabled = false;
+    $("goErr").textContent = d.error;
+    $("goErr").classList.remove("hidden");
     return;
   }
-  clearInterval(poll);
-  poll = setInterval(() => checkStatus(d.job_id), 600);
-  checkStatus(d.job_id);
+  refresh();
 };
 
-async function checkStatus(id) {
-  const r = await fetch("/api/status/" + id);
-  if (!r.ok) return;
-  const j = await r.json();
-
-  if (j.state === "downloading") {
-    $("bar").classList.remove("indet");
-    $("fill").style.width = (j.percent || 0) + "%";
-    $("stateTxt").textContent = fill(T.web_downloading, { percent: num(j.percent || 0, 1) });
-    const parts = [];
-    if (j.total) parts.push(fmtSize(j.downloaded) + " / " + fmtSize(j.total));
-    if (j.speed) parts.push(fmtSize(j.speed) + "/s");
-    if (j.eta) parts.push(fill(T.eta_left, { time: fmtDur(j.eta) }));
-    $("statNums").textContent = parts.join("  ·  ");
-  } else if (j.state === "processing" || j.state === "starting" || j.state === "queued") {
-    $("bar").classList.add("indet");
-    $("stateTxt").textContent = j.state === "processing"
-      ? (j.stage || T.stage_processing) + "…"
-      : T.starting;
-    $("statNums").textContent = "";
-  } else if (j.state === "done") {
-    clearInterval(poll);
-    $("bar").classList.remove("indet");
-    $("fill").style.width = "100%";
-    $("stateTxt").innerHTML = '<span class="done"></span>';
-    $("stateTxt").firstChild.textContent = T.web_done;
-    $("statNums").textContent = fmtSize(j.filesize);
-    const a = $("dl");
-    a.href = "/api/file/" + id;
-    a.textContent = fill(T.web_save_named, { name: j.filename });
-    a.classList.remove("hidden");
-    $("go").disabled = false;
-  } else if (j.state === "error") {
-    clearInterval(poll);
-    $("bar").classList.remove("indet");
-    $("stateTxt").textContent = T.failed;
-    $("progErr").textContent = j.error;
-    $("progErr").classList.remove("hidden");
-    $("go").disabled = false;
-  }
+async function act(method, path) {
+  await fetch(path, { method });
+  refresh();
 }
+$("cancelAll").onclick = () => { if (confirm(T.queue_cancel_all_ask)) act("POST", "/api/queue/cancel_all"); };
+$("clearDone").onclick = () => act("POST", "/api/queue/clear");
+
+// Rows are kept by job and updated in place, so a click never lands on a
+// button that was just redrawn.
+const rows = new Map();
+function makeRow(id) {
+  const el = document.createElement("div");
+  el.className = "job";
+  el.innerHTML = '<div class="top"><div class="name"></div><div class="acts"></div></div>'
+    + '<div class="detail"></div><div class="bar hidden"><i></i></div><div class="err hidden"></div>';
+  rows.set(id, el);
+  return el;
+}
+function button(text, onclick) {
+  const b = document.createElement("button");
+  b.className = "small";
+  b.textContent = text;
+  b.onclick = onclick;
+  return b;
+}
+function renderRow(el, j) {
+  const name = el.querySelector(".name");
+  name.textContent = j.title;
+  name.title = j.title;
+  el.querySelector(".detail").textContent = [j.summary, j.status, j.numbers].filter(Boolean).join("   ·   ");
+  const bar = el.querySelector(".bar");
+  bar.classList.toggle("hidden", j.state !== "running");
+  bar.classList.toggle("indet", j.busy);
+  bar.firstChild.style.width = j.busy ? "" : Math.max(j.percent, 0) + "%";
+  const err = el.querySelector(".err");
+  err.classList.toggle("hidden", !j.error);
+  err.textContent = j.error || "";
+  // Buttons only change with the state, so they're rebuilt only then.
+  const key = j.state + (j.cancelling ? "!" : "");
+  if (el.dataset.key === key) return;
+  el.dataset.key = key;
+  const acts = el.querySelector(".acts");
+  acts.innerHTML = "";
+  if (j.state === "running") {
+    const b = button(T.cancel, () => act("POST", "/api/job/" + j.id + "/cancel"));
+    b.disabled = j.cancelling;
+    acts.appendChild(b);
+    return;
+  }
+  if (j.state === "done") {
+    const a = document.createElement("a");
+    a.className = "save";
+    a.href = "/api/file/" + j.id;
+    a.textContent = T.web_save_file;
+    a.title = j.filename || "";
+    acts.appendChild(a);
+  }
+  if (j.state === "failed" || j.state === "cancelled") {
+    acts.appendChild(button(T.queue_retry, () => act("POST", "/api/job/" + j.id + "/retry")));
+  }
+  acts.appendChild(button(T.queue_remove, () => act("DELETE", "/api/job/" + j.id)));
+}
+
+async function refresh() {
+  let list;
+  try {
+    const r = await fetch("/api/queue");
+    list = (await r.json()).jobs;
+  } catch (e) {
+    return;
+  }
+  const box = $("jobs");
+  const seen = new Set();
+  list.forEach((j, i) => {
+    seen.add(j.id);
+    const el = rows.get(j.id) || makeRow(j.id);
+    renderRow(el, j);
+    if (box.children[i] !== el) box.insertBefore(el, box.children[i] || null);
+  });
+  for (const [id, el] of rows) {
+    if (!seen.has(id)) { el.remove(); rows.delete(id); }
+  }
+  const done = list.filter(j => j.state === "done").length;
+  $("qcount").textContent = fill(T.queue_summary, { done, total: list.length });
+  busy = list.some(j => j.state === "waiting" || j.state === "running");
+  $("cancelAll").classList.toggle("hidden", !busy);
+  $("clearDone").classList.toggle("hidden", !list.some(j => ["done", "failed", "cancelled"].includes(j.state)));
+  $("queue").classList.toggle("hidden", !list.length);
+  syncButton();
+  // Poll while anything is moving; any click starts it again.
+  clearTimeout(poll);
+  if (busy) poll = setTimeout(refresh, 700);
+}
+
+refresh();
 </script>
 </body>
 </html>

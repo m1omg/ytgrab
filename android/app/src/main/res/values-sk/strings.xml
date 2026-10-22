@@ -71,11 +71,84 @@
     <string name="saved_to">Uložené do %1$s</string>
     <string name="cancelled">Zrušené</string>
     <string name="download_failed">Sťahovanie zlyhalo</string>
-    <string name="busy">Sťahovanie už prebieha.</string>
     <string name="no_app">V tomto zariadení nie je aplikácia, ktorá by tento súbor otvorila.</string>
     <string name="storage_permission">ytgrab potrebuje povolenie ukladať do priečinka Stiahnuté.</string>
 
     <!-- notifications -->
     <string name="channel_downloads">Sťahovanie</string>
     <string name="notif_saved">Uložené</string>
+
+    <!-- queue and several at once -->
+    <string name="queue_add">Pridať do frontu</string>
+    <plurals name="download_n">
+        <item quantity="one">Stiahnuť %d video</item>
+        <item quantity="few">Stiahnuť %d videá</item>
+        <item quantity="many">Stiahnuť %d videí</item>
+        <item quantity="other">Stiahnuť %d videí</item>
+    </plurals>
+    <plurals name="queue_add_n">
+        <item quantity="one">Pridať %d video do frontu</item>
+        <item quantity="few">Pridať %d videá do frontu</item>
+        <item quantity="many">Pridať %d videí do frontu</item>
+        <item quantity="other">Pridať %d videí do frontu</item>
+    </plurals>
+    <plurals name="download_links">
+        <item quantity="one">Stiahnuť %d odkaz</item>
+        <item quantity="few">Stiahnuť %d odkazy</item>
+        <item quantity="many">Stiahnuť %d odkazov</item>
+        <item quantity="other">Stiahnuť %d odkazov</item>
+    </plurals>
+    <plurals name="queue_add_links">
+        <item quantity="one">Pridať %d odkaz do frontu</item>
+        <item quantity="few">Pridať %d odkazy do frontu</item>
+        <item quantity="many">Pridať %d odkazov do frontu</item>
+        <item quantity="other">Pridať %d odkazov do frontu</item>
+    </plurals>
+    <plurals name="batch_title">
+        <item quantity="one">%d odkaz</item>
+        <item quantity="few">%d odkazy</item>
+        <item quantity="many">%d odkazov</item>
+        <item quantity="other">%d odkazov</item>
+    </plurals>
+    <string name="batch_note">Každý sa stiahne s nastaveniami nižšie, jeden po druhom. Odkaz na playlist pridá všetky jeho videá.</string>
+    <string name="playlist_this">Len toto video</string>
+    <plurals name="playlist_whole">
+        <item quantity="one">Celý playlist – %d video</item>
+        <item quantity="few">Celý playlist – %d videá</item>
+        <item quantity="many">Celý playlist – %d videí</item>
+        <item quantity="other">Celý playlist – %d videí</item>
+    </plurals>
+    <string name="playlist_name">„%1$s“</string>
+    <plurals name="playlist_videos">
+        <item quantity="one">%d video</item>
+        <item quantity="few">%d videá</item>
+        <item quantity="many">%d videí</item>
+        <item quantity="other">%d videí</item>
+    </plurals>
+    <string name="playlist_label">Playlist</string>
+    <string name="playlist_empty">Na tomto odkaze sa nenašlo žiadne video na stiahnutie.</string>
+    <plurals name="queued_n">
+        <item quantity="one">Do frontu pribudlo %d sťahovanie</item>
+        <item quantity="few">Do frontu pribudli %d sťahovania</item>
+        <item quantity="many">Do frontu pribudlo %d sťahovaní</item>
+        <item quantity="other">Do frontu pribudlo %d sťahovaní</item>
+    </plurals>
+    <string name="queue_title">Sťahovanie</string>
+    <string name="queue_summary">Hotovo %1$d z %2$d</string>
+    <string name="queue_waiting">Čaká</string>
+    <string name="queue_remove">Odstrániť</string>
+    <string name="queue_retry">Skúsiť znova</string>
+    <string name="queue_clear">Odstrániť dokončené</string>
+    <string name="queue_cancel_all">Zrušiť všetko</string>
+    <string name="queue_cancel_all_ask">Zastaviť prebiehajúce sťahovanie a odstrániť všetko, čo ešte čaká?</string>
+    <string name="queue_keep">Pokračovať</string>
+    <string name="saved">Uložené</string>
+    <string name="summary_best">najlepšia kvalita</string>
+    <string name="summary_up_to">do %1$sp</string>
+    <string name="summary_kbps">%1$s kb/s</string>
+    <string name="notif_waiting">Čaká: %1$d</string>
+    <string name="notif_queue_done">Sťahovanie dokončené</string>
+    <string name="notif_count_saved">Uložené: %1$d</string>
+    <string name="notif_count_failed">Zlyhalo: %1$d</string>
+    <string name="notif_count_cancelled">Zrušené: %1$d</string>
 </resources>

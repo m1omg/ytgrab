@@ -73,11 +73,68 @@
     <string name="saved_to">Saved to %1$s</string>
     <string name="cancelled">Cancelled</string>
     <string name="download_failed">Download failed</string>
-    <string name="busy">A download is already running.</string>
     <string name="no_app">No app on this device can open this file.</string>
     <string name="storage_permission">ytgrab needs permission to save into your Downloads folder.</string>
 
     <!-- notifications -->
     <string name="channel_downloads">Downloads</string>
     <string name="notif_saved">Saved</string>
+
+    <!-- queue and several at once -->
+    <string name="queue_add">Add to queue</string>
+    <plurals name="download_n">
+        <item quantity="one">Download %d video</item>
+        <item quantity="other">Download %d videos</item>
+    </plurals>
+    <plurals name="queue_add_n">
+        <item quantity="one">Add %d video to the queue</item>
+        <item quantity="other">Add %d videos to the queue</item>
+    </plurals>
+    <plurals name="download_links">
+        <item quantity="one">Download %d link</item>
+        <item quantity="other">Download %d links</item>
+    </plurals>
+    <plurals name="queue_add_links">
+        <item quantity="one">Add %d link to the queue</item>
+        <item quantity="other">Add %d links to the queue</item>
+    </plurals>
+    <plurals name="batch_title">
+        <item quantity="one">%d link</item>
+        <item quantity="other">%d links</item>
+    </plurals>
+    <string name="batch_note">Each one downloads with the settings below, one after another. A playlist link brings all its videos.</string>
+    <string name="playlist_this">Just this video</string>
+    <plurals name="playlist_whole">
+        <item quantity="one">Whole playlist - %d video</item>
+        <item quantity="other">Whole playlist - %d videos</item>
+    </plurals>
+    <string name="playlist_name">“%1$s”</string>
+    <plurals name="playlist_videos">
+        <item quantity="one">%d video</item>
+        <item quantity="other">%d videos</item>
+    </plurals>
+    <string name="playlist_label">Playlist</string>
+    <string name="playlist_empty">No downloadable video found at that link.</string>
+    <plurals name="queued_n">
+        <item quantity="one">Added %d download to the queue</item>
+        <item quantity="other">Added %d downloads to the queue</item>
+    </plurals>
+    <string name="queue_title">Downloads</string>
+    <string name="queue_summary">%1$d of %2$d done</string>
+    <string name="queue_waiting">Waiting</string>
+    <string name="queue_remove">Remove</string>
+    <string name="queue_retry">Try again</string>
+    <string name="queue_clear">Clear finished</string>
+    <string name="queue_cancel_all">Cancel all</string>
+    <string name="queue_cancel_all_ask">Stop the download in progress and remove everything still waiting?</string>
+    <string name="queue_keep">Keep going</string>
+    <string name="saved">Saved</string>
+    <string name="summary_best">best quality</string>
+    <string name="summary_up_to">up to %1$sp</string>
+    <string name="summary_kbps">%1$s kbps</string>
+    <string name="notif_waiting">Waiting: %1$d</string>
+    <string name="notif_queue_done">Downloads finished</string>
+    <string name="notif_count_saved">Saved: %1$d</string>
+    <string name="notif_count_failed">Failed: %1$d</string>
+    <string name="notif_count_cancelled">Cancelled: %1$d</string>
 </resources>

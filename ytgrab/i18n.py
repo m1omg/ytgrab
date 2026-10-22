@@ -109,6 +109,39 @@ STRINGS = {
         "cancel": "Cancel",
         "show_in_folder": "Show in folder",
 
+        # -- queue and several at once --
+        # Counted strings hold one form per plural; see tn().
+        "queue_add": "Add to queue",
+        "download_n": ("Download {count} video", "Download {count} videos"),
+        "queue_add_n": ("Add {count} video to the queue", "Add {count} videos to the queue"),
+        "download_links": ("Download {count} link", "Download {count} links"),
+        "queue_add_links": ("Add {count} link to the queue", "Add {count} links to the queue"),
+        "batch_title": ("{count} link", "{count} links"),
+        "batch_note": ("Each one downloads with the settings below, one after another. "
+                       "A playlist link brings all its videos."),
+        "read_one_link": "Fetch reads one link at a time; several links download as they are.",
+        "playlist_this": "Just this video",
+        "playlist_whole": ("Whole playlist - {count} video", "Whole playlist - {count} videos"),
+        "playlist_name": "“{title}”",
+        "playlist_videos": ("{count} video", "{count} videos"),
+        "playlist_label": "Playlist",
+        "part_one_video": "A part is cut from one video, so it isn't offered for several at once.",
+        "queue_title": "Downloads",
+        "queue_summary": "{done} of {total} done",
+        "queue_waiting": "Waiting",
+        "queue_remove": "Remove",
+        "queue_retry": "Try again",
+        "queue_clear": "Clear finished",
+        "queue_cancel_all": "Cancel all",
+        "queue_cancel_all_ask": "Stop the download in progress and remove everything still waiting?",
+        "queued_n": ("Added {count} download to the queue", "Added {count} downloads to the queue"),
+        "quit_busy_title": "Downloads not finished",
+        "quit_busy_body": ("{count} download hasn't finished. Quit anyway? It will be lost.",
+                           "{count} downloads haven't finished. Quit anyway? They will be lost."),
+        "summary_best": "best quality",
+        "summary_up_to": "up to {height}p",
+        "summary_kbps": "{kbps} kbps",
+
         # -- status bar --
         "ffmpeg_at": "ffmpeg: {path}",
         "ffmpeg_status_missing": "ffmpeg not found - conversion will fail",
@@ -288,6 +321,43 @@ STRINGS = {
         "cancel": "Zrušiť",
         "show_in_folder": "Zobraziť v priečinku",
 
+        # -- queue and several at once --
+        "queue_add": "Pridať do frontu",
+        "download_n": ("Stiahnuť {count} video", "Stiahnuť {count} videá", "Stiahnuť {count} videí"),
+        "queue_add_n": ("Pridať {count} video do frontu", "Pridať {count} videá do frontu",
+                        "Pridať {count} videí do frontu"),
+        "download_links": ("Stiahnuť {count} odkaz", "Stiahnuť {count} odkazy", "Stiahnuť {count} odkazov"),
+        "queue_add_links": ("Pridať {count} odkaz do frontu", "Pridať {count} odkazy do frontu",
+                            "Pridať {count} odkazov do frontu"),
+        "batch_title": ("{count} odkaz", "{count} odkazy", "{count} odkazov"),
+        "batch_note": ("Každý sa stiahne s nastaveniami nižšie, jeden po druhom. "
+                       "Odkaz na playlist pridá všetky jeho videá."),
+        "read_one_link": "Načítať sa dá len jeden odkaz; viac odkazov sa stiahne tak, ako sú.",
+        "playlist_this": "Len toto video",
+        "playlist_whole": ("Celý playlist – {count} video", "Celý playlist – {count} videá",
+                           "Celý playlist – {count} videí"),
+        "playlist_name": "„{title}“",
+        "playlist_videos": ("{count} video", "{count} videá", "{count} videí"),
+        "playlist_label": "Playlist",
+        "part_one_video": "Časť sa vystrihuje z jedného videa, preto sa pri viacerých naraz neponúka.",
+        "queue_title": "Sťahovanie",
+        "queue_summary": "Hotovo {done} z {total}",
+        "queue_waiting": "Čaká",
+        "queue_remove": "Odstrániť",
+        "queue_retry": "Skúsiť znova",
+        "queue_clear": "Odstrániť dokončené",
+        "queue_cancel_all": "Zrušiť všetko",
+        "queue_cancel_all_ask": "Zastaviť prebiehajúce sťahovanie a odstrániť všetko, čo ešte čaká?",
+        "queued_n": ("Do frontu pribudlo {count} sťahovanie", "Do frontu pribudli {count} sťahovania",
+                     "Do frontu pribudlo {count} sťahovaní"),
+        "quit_busy_title": "Sťahovanie neskončilo",
+        "quit_busy_body": ("{count} sťahovanie ešte neskončilo. Ukončiť aj tak? Stratí sa.",
+                           "{count} sťahovania ešte neskončili. Ukončiť aj tak? Stratia sa.",
+                           "{count} sťahovaní ešte neskončilo. Ukončiť aj tak? Stratia sa."),
+        "summary_best": "najlepšia kvalita",
+        "summary_up_to": "do {height}p",
+        "summary_kbps": "{kbps} kb/s",
+
         # -- status bar --
         "ffmpeg_at": "ffmpeg: {path}",
         "ffmpeg_status_missing": "ffmpeg sa nenašiel – konverzia zlyhá",
@@ -411,6 +481,24 @@ def t(key, lang=None, **fields):
     table = STRINGS.get(lang or _current, {})
     text = table.get(key) or STRINGS[DEFAULT_LANGUAGE].get(key, key)
     return text.format(**fields) if fields else text
+
+
+def plural_index(count, lang=None):
+    """Which form of a counted string fits: English has 1 / more, Slovak
+    1 / 2-4 / 5 and up (and 0)."""
+    if (lang or _current) == "sk":
+        return 0 if count == 1 else 1 if 2 <= count <= 4 else 2
+    return 0 if count == 1 else 1
+
+
+def tn(key, count, lang=None, **fields):
+    """A counted string, in the form its count takes: tn("playlist_videos", 3)."""
+    lang = lang or _current
+    forms = STRINGS.get(lang, {}).get(key)
+    if forms is None:
+        lang, forms = DEFAULT_LANGUAGE, STRINGS[DEFAULT_LANGUAGE][key]
+    form = forms[min(plural_index(count, lang), len(forms) - 1)]
+    return form.format(count=count, **fields)
 
 
 def number(value, digits=1, lang=None):

@@ -89,6 +89,30 @@ asked. MKV can only start video on a keyframe, so an MKV part may begin a moment
 If ffmpeg can't fetch the part by itself - some servers refuse it - ytgrab
 downloads the whole video and cuts the part out, so it still works, just slower.
 
+## Several at once
+
+Downloads go into a list and run **one at a time**, in order - YouTube is
+quicker to ask whether you're a bot when several run together. While one is
+running, the button reads **Add to queue**: pick the next video and its
+settings, and it waits its turn with whatever settings you chose for it.
+
+* **Several links:** paste a list of links (one per line, or with spaces
+  between them) into the link box, or share several at once on Android. The
+  box shows how many there are, and **Download N links** queues them all with
+  the settings below it.
+* **Playlists:** fetch a link to a video that sits in a playlist and choose
+  *Just this video* or *Whole playlist*. A link to a playlist alone (or a
+  channel's videos) downloads all of it. A playlist link among several links
+  brings all its videos too.
+* Each download in the list has its own progress and buttons: **Cancel** the
+  one running, **Remove** one that waits, **Try again** after a failure,
+  **Show in folder** (on Android *Open* and *Share*) once it's saved.
+  **Cancel all** stops everything; **Clear finished** tidies the list.
+
+Resolution works as a ceiling when several videos share it: *1080p* takes each
+video's best up to 1080p. *Only a part* is for one video at a time, so it's off
+for several links and whole playlists.
+
 ## "Confirm you're not a bot"
 
 YouTube sometimes stops a connection it doesn't trust and asks it to sign in.
@@ -126,8 +150,8 @@ download engine - with a phone-shaped screen:
 
 * **Share** a video from the YouTube app (or a browser) and pick ytgrab; the
   link is filled in and read straight away.
-* Downloads keep running in the background, with progress and a *Cancel*
-  button in the notification.
+* Downloads keep running in the background, one after another, with progress,
+  how many are waiting and *Cancel* / *Cancel all* in the notification.
 * Finished files land in **Download/ytgrab**, ready for any player, file
   manager or the *Share* button.
 * It follows the phone's language (English or Slovak), and on Android 13+ the
