@@ -1,13 +1,13 @@
 """PySide6 desktop interface for ytgrab."""
 
 import sys
-import urllib.request
+import threading
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QThread, Signal, QUrl, QPoint, QLocale, QSettings
+from PySide6.QtCore import Qt, QObject, QThread, Signal, QUrl, QPoint, QLocale, QSettings
 from PySide6.QtGui import (
-    QPixmap, QDesktopServices, QIcon, QPainter, QColor, QPolygon,
-    QAction, QActionGroup,
+    QPixmap, QImage, QDesktopServices, QIcon, QPainter, QColor, QPolygon,
+    QAction, QActionGroup, QPalette,
 )
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
@@ -34,6 +34,20 @@ class Cancelled(Exception):
     """Raised inside a yt-dlp hook to abort a download."""
 
 
+def muted_style():
+    """Style for secondary text: the theme's text colour, faded toward its background.
+
+    palette(mid) all but vanishes on some light themes; this keeps about 5:1
+    contrast on light and dark ones alike.
+    """
+    palette = QApplication.palette()
+    text = palette.color(QPalette.WindowText)
+    back = palette.color(QPalette.Window)
+    mix = [round(a * 0.7 + b * 0.3) for a, b in
+           zip(text.getRgb()[:3], back.getRgb()[:3])]
+    return "color: #%02x%02x%02x;" % tuple(mix)
+
+
 # --------------------------------------------------------------------------
 # workers
 # --------------------------------------------------------------------------
@@ -54,20 +68,24 @@ class InfoWorker(QThread):
             self.failed.emit(core.clean_error(exc, login=self.cookies_browser))
 
 
-class ThumbWorker(QThread):
-    loaded = Signal(bytes)
+class ThumbLoader(QObject):
+    """Loads a thumbnail on a plain daemon thread, which closing the window
+    never has to wait for. The token says which read it belongs to."""
 
-    def __init__(self, url):
+    loaded = Signal(int, bytes)
+
+    def __init__(self, token, urls):
         super().__init__()
-        self.url = url
+        self.token, self.urls = token, urls
 
-    def run(self):
-        try:
-            req = urllib.request.Request(self.url, headers={"User-Agent": "ytgrab"})
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                self.loaded.emit(resp.read())
-        except Exception:  # noqa: BLE001 - a missing thumbnail is not an error
-            pass
+    def start(self):
+        threading.Thread(target=self._run, daemon=True).start()
+
+    def _run(self):
+        # Only an image Qt can draw counts; otherwise the next one is tried.
+        data = core.fetch_image(self.urls, accept=lambda d: not QImage.fromData(d).isNull())
+        if data:
+            self.loaded.emit(self.token, data)
 
 
 class DownloadWorker(QThread):
@@ -145,7 +163,7 @@ class MainWindow(QMainWindow):
         self.setMinimumWidth(620)
         self.dest_dir = core.default_download_dir()
         self.info_worker = None
-        self.thumb_worker = None
+        self.thumb_token = 0      # which read the thumbnail on screen belongs to
         self.dl_worker = None
         self.last_file = None
         self.info = None          # last metadata read, for relabelling
@@ -249,7 +267,7 @@ class MainWindow(QMainWindow):
         font.setBold(True)
         self.title_label.setFont(font)
         self.meta_label = QLabel()
-        self.meta_label.setStyleSheet("color: palette(mid);")
+        self.meta_label.setStyleSheet(muted_style())
         text_col.addWidget(self.title_label)
         text_col.addWidget(self.meta_label)
         text_col.addStretch(1)
@@ -421,7 +439,7 @@ class MainWindow(QMainWindow):
         top = QHBoxLayout()
         self.state_label = QLabel("")
         self.stats_label = QLabel("")
-        self.stats_label.setStyleSheet("color: palette(mid);")
+        self.stats_label.setStyleSheet(muted_style())
         self.stats_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         top.addWidget(self.state_label)
         top.addStretch(1)
@@ -615,10 +633,10 @@ class MainWindow(QMainWindow):
         except ValueError as exc:
             # Two empty fields are where everyone starts: a hint, not an error.
             empty = not (self.part_from.text().strip() or self.part_to.text().strip())
-            self.part_summary.setStyleSheet("color: palette(mid);" if empty else "color: #e53935;")
+            self.part_summary.setStyleSheet(muted_style() if empty else "color: #e53935;")
             self.part_summary.setText(str(exc))
             return
-        self.part_summary.setStyleSheet("color: palette(mid);")
+        self.part_summary.setStyleSheet(muted_style())
         if end is None:
             self.part_summary.setText(t("part_summary_open", start=core.format_time(start)))
         else:
@@ -691,15 +709,19 @@ class MainWindow(QMainWindow):
         self._sync_part_video()
 
         self.thumb_label.clear()
-        if info["thumbnail"]:
-            self.thumb_worker = ThumbWorker(info["thumbnail"])
-            self.thumb_worker.loaded.connect(self._on_thumb)
-            self.thumb_worker.start()
+        urls = info.get("thumbnails") or [info["thumbnail"]]
+        self.thumb_token += 1
+        if any(urls):
+            loader = ThumbLoader(self.thumb_token, urls)
+            loader.loaded.connect(self._on_thumb)
+            loader.start()
 
         self.info_panel.setVisible(True)
         self.statusBar().showMessage(t("ready"), 4000)
 
-    def _on_thumb(self, data):
+    def _on_thumb(self, token, data):
+        if token != self.thumb_token:
+            return  # a video read before the one on screen
         pix = QPixmap()
         if pix.loadFromData(data):
             self.thumb_label.setPixmap(pix)

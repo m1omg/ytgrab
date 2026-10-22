@@ -26,6 +26,8 @@ data class VideoInfo(
     val uploader: String,
     val duration: Int,
     val thumbnail: String,
+    /** Best first; the best-ranked ones don't always exist, so each is tried in turn. */
+    val thumbnails: List<String>,
     val heights: List<Int>,
     val isLive: Boolean,
     val transcripts: List<Transcript>,
@@ -34,11 +36,13 @@ data class VideoInfo(
         fun from(json: JSONObject): VideoInfo {
             val heights = json.getJSONArray("heights")
             val tracks = json.getJSONArray("transcripts")
+            val thumbs = json.optJSONArray("thumbnails")
             return VideoInfo(
                 title = json.optString("title"),
                 uploader = json.optString("uploader"),
                 duration = json.optInt("duration"),
                 thumbnail = json.optString("thumbnail"),
+                thumbnails = thumbs?.let { list -> List(list.length()) { list.getString(it) } }.orEmpty(),
                 heights = List(heights.length()) { heights.getInt(it) },
                 isLive = json.optBoolean("is_live"),
                 transcripts = List(tracks.length()) {
@@ -115,8 +119,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         partOn = false
         if (height != "best" && height.toIntOrNull() !in video.heights) height = "best"
         transcriptLang = defaultTranscript(video.transcripts)
-        if (video.thumbnail.isNotEmpty()) {
-            viewModelScope.launch { thumbnail = loadImage(video.thumbnail) }
+        val candidates = video.thumbnails.ifEmpty { listOf(video.thumbnail) }.filter { it.isNotEmpty() }
+        if (candidates.isNotEmpty()) {
+            viewModelScope.launch {
+                val image = candidates.firstNotNullOfOrNull { loadImage(it) }
+                // A slower load for an earlier video mustn't land on this one.
+                if (info === video) thumbnail = image
+            }
         }
     }
 

@@ -239,6 +239,18 @@ function fmtSize(b) {
   while (b >= 1024 && i < u.length - 1) { b /= 1024; i++; }
   return num(b, i ? 1 : 0) + " " + u[i];
 }
+// The best-ranked thumbnail doesn't always exist; the others are tried in turn.
+function showThumb(urls) {
+  const img = $("thumb");
+  let next = 0;
+  img.onerror = () => {
+    next++;
+    if (next < urls.length) img.src = urls[next];
+    else img.classList.add("hidden");
+  };
+  img.classList.toggle("hidden", !urls.length);
+  if (urls.length) img.src = urls[0];
+}
 function fmtDur(s) {
   if (!s) return "";
   const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = Math.floor(s % 60);
@@ -277,8 +289,7 @@ async function fetchInfo() {
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || T.read_failed);
 
-    $("thumb").src = d.thumbnail || "";
-    $("thumb").classList.toggle("hidden", !d.thumbnail);
+    showThumb((d.thumbnails || []).length ? d.thumbnails : [d.thumbnail].filter(Boolean));
     $("title").textContent = d.title || "";
     $("submeta").textContent = [d.uploader, fmtDur(d.duration), d.is_live ? T.live : ""]
       .filter(Boolean).join(" · ");
