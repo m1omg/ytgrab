@@ -182,6 +182,10 @@ STRINGS = {
         "stage_Cut": "Cutting out the part",
 
         # -- engine errors --
+        "err_file_locked": ("Windows wouldn't let ytgrab finish the file: another program kept it "
+                            "open - usually antivirus or a sync app like OneDrive. Try again; if it "
+                            "keeps happening, let that program skip your download folder, or save "
+                            "to another folder."),
         "err_bot": ("YouTube asked this machine to confirm it isn't a bot, and stopped the "
                     "other ways ytgrab tried as well. Waiting a while or switching networks "
                     "usually clears it. If it keeps happening, sign in to YouTube in your "
@@ -398,6 +402,10 @@ STRINGS = {
         "stage_Cut": "Vystrihovanie časti",
 
         # -- engine errors --
+        "err_file_locked": ("Windows nedovolil ytgrabu súbor dokončiť: mal ho otvorený iný program – "
+                            "zvyčajne antivírus alebo synchronizácia ako OneDrive. Skúste to znova; "
+                            "ak sa to opakuje, nastavte tomu programu, aby váš priečinok na "
+                            "sťahovanie vynechal, alebo ukladajte inam."),
         "err_bot": ("YouTube žiada od tohto počítača potvrdenie, že nie je robot, a zastavil "
                     "aj ostatné spôsoby, ktoré ytgrab skúsil. Zvyčajne pomôže chvíľu počkať "
                     "alebo prejsť na inú sieť. Ak sa to opakuje, prihláste sa do YouTube "

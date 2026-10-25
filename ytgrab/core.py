@@ -57,6 +57,38 @@ if sys.platform == "darwin":
 # Files yt-dlp leaves beside the real output (thumbnails, partial downloads).
 _JUNK_SUFFIXES = {".part", ".ytdl", ".temp", ".jpg", ".png", ".webp", ".json", ".description"}
 
+# How long a rename waits for another program to let go of a file.
+_LOCK_WAIT_SECONDS = 20.0
+
+
+def _patient(move):
+    """os.replace or os.rename, waiting out another program holding the file.
+
+    On Windows a file that was just written can't be renamed or replaced
+    while antivirus, the search indexer or a sync app like OneDrive has it
+    open - and yt-dlp renames every file it post-processes ("x.temp.mp3" ->
+    "x.mp3") straight after writing it, without trying again.
+    """
+    @functools.wraps(move)
+    def patient(src, dst, *args, **kwargs):
+        deadline = time.monotonic() + _LOCK_WAIT_SECONDS
+        delay = 0.05
+        while True:
+            try:
+                return move(src, dst, *args, **kwargs)
+            except PermissionError:
+                if time.monotonic() >= deadline:
+                    raise
+                time.sleep(delay)
+                delay = min(delay * 2, 1.0)
+    return patient
+
+
+if sys.platform == "win32":
+    # Process-wide, so yt-dlp's renames and pathlib's and shutil's all wait.
+    os.replace = _patient(os.replace)
+    os.rename = _patient(os.rename)
+
 
 # --------------------------------------------------------------------------
 # ffmpeg discovery
@@ -244,7 +276,11 @@ def clean_error(message, lang=None, login=None):
     if isinstance(message, LoginReadError):
         return t("err_cookies", lang, browser=COOKIE_BROWSERS.get(message.browser, message.browser),
                  reason=message.reason[:300])
+    if isinstance(message, OSError) and getattr(message, "winerror", None) in (5, 32):
+        return t("err_file_locked", lang)
     message = _plain(message)
+    if _FILE_LOCKED.search(message):
+        return t("err_file_locked", lang)
     if _BOT_CHECK.search(message):
         if login:
             return t("err_bot_login", lang, browser=COOKIE_BROWSERS.get(login, login))
@@ -416,6 +452,8 @@ _PREFER_FALLBACK_SECONDS = 30 * 60
 _prefer_fallback_until = 0.0
 
 _BOT_CHECK = re.compile(r"Sign in to confirm|not a bot")
+# Windows' "access is denied" and "used by another process", as yt-dlp words them.
+_FILE_LOCKED = re.compile(r"\[WinError (?:5|32)\]")
 
 
 def _is_forbidden(exc):
