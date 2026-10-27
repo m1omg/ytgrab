@@ -23,7 +23,10 @@ Grab a build from the [Releases](../../releases) page:
 | Android (older 32-bit phones) | `ytgrab-android-arm32.apk` |
 | Android (not sure, Chromebooks) | `ytgrab-android-universal.apk` |
 
-On Linux, mark it executable first: `chmod +x ytgrab-linux-x86_64`.
+On Linux, mark it executable first: `chmod +x ytgrab-linux-x86_64`. It needs
+glibc 2.39 or newer: Ubuntu 24.04, Debian 13, LMDE 7, Fedora 40, Linux Mint 22
+or later, or a rolling distro such as Arch, CachyOS or openSUSE Tumbleweed
+(`ldd --version` shows yours).
 
 On Android, open the downloaded APK and allow your browser or file manager to
 install apps when asked. Newer versions install straight over older ones.

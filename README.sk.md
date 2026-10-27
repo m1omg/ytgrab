@@ -24,6 +24,9 @@ Zostavenú aplikáciu nájdete na stránke [Releases](../../releases):
 | Android (neviete, Chromebooky) | `ytgrab-android-universal.apk` |
 
 Na Linuxe súbor najprv označte ako spustiteľný: `chmod +x ytgrab-linux-x86_64`.
+Potrebuje glibc 2.39 alebo novšiu: Ubuntu 24.04, Debian 13, LMDE 7, Fedora 40,
+Linux Mint 22 a novšie, alebo priebežne aktualizovanú distribúciu ako Arch,
+CachyOS či openSUSE Tumbleweed (vašu verziu ukáže `ldd --version`).
 
 Na Androide otvorte stiahnutý súbor APK a keď sa systém spýta, povoľte
 prehliadaču alebo správcovi súborov inštalovať aplikácie. Novšie verzie sa
