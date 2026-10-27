@@ -150,6 +150,44 @@ if sys.platform == "darwin" and _target:
         print("dropped %d binaries built for the wrong architecture"
               % len(_mismatched))
 
+# PyInstaller bundles the build machine's own copies of libraries like glib,
+# and those only run on systems whose glibc is at least as new as the one they
+# were built against. Say what this build needs, and with YTGRAB_MAX_GLIBC set
+# (CI does), refuse to produce a binary that needs more than that.
+if sys.platform.startswith("linux"):
+    import re as _re
+    import subprocess as _sub
+
+    def _glibc_needed(path):
+        out = _sub.run(["objdump", "-T", path], capture_output=True,
+                       text=True, timeout=60).stdout
+        found = _re.findall(r"\bGLIBC_(\d+(?:\.\d+)+)", out)
+        return max((tuple(int(n) for n in v.split(".")) for v in found),
+                   default=())
+
+    def _fmt(version):
+        return ".".join(str(n) for n in version)
+
+    _max = os.environ.get("YTGRAB_MAX_GLIBC")
+    _limit = tuple(int(n) for n in _max.split(".")) if _max else None
+    if _limit and not _shutil.which("objdump"):
+        raise SystemExit("YTGRAB_MAX_GLIBC is set but objdump is missing; "
+                         "install binutils to check the bundled libraries.")
+    _needs = []
+    if _shutil.which("objdump"):
+        _needs = [(_glibc_needed(str(e[1])), str(e[0])) for e in a.binaries]
+        _needs = [n for n in _needs if n[0]]
+    if _needs:
+        _top = max(v for v, _ in _needs)
+        print("bundled libraries need glibc %s or newer" % _fmt(_top))
+        if _limit and _top > _limit:
+            _over = sorted((n for n in _needs if n[0] > _limit), reverse=True)
+            raise SystemExit(
+                "These bundled libraries need a newer glibc than %s, so the "
+                "binary would not start on older systems - build on an older "
+                "distro:\n%s" % (_max, "\n".join(
+                    "  %s needs %s" % (name, _fmt(v)) for v, name in _over)))
+
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
 common = dict(
@@ -187,7 +225,7 @@ if ONEDIR:
         info_plist={
             "NSHighResolutionCapable": True,
             "LSMinimumSystemVersion": "12.0",
-            "CFBundleShortVersionString": "1.4.1",
+            "CFBundleShortVersionString": "1.4.2",
         },
     )
 else:

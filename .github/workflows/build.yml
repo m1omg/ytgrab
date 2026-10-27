@@ -71,10 +71,16 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          # The Linux binary carries the build machine's own libraries (glib,
+          # for one), which only run where glibc is at least as new as there.
+          # ubuntu-latest moved to 26.04 (glibc 2.43) and broke 1.4.1 on
+          # Debian 13 (2.41), so the image is pinned and the build fails if
+          # anything bundled needs more than max-glibc.
+          - os: ubuntu-24.04
             name: linux-x86_64
             artifact: ytgrab-linux-x86_64
             qjs: linux-x86_64
+            max-glibc: "2.39"
           - os: windows-latest
             name: windows-x86_64
             artifact: ytgrab-windows-x86_64.exe
@@ -178,6 +184,7 @@ jobs:
       - name: Build
         env:
           YTGRAB_TARGET_ARCH: ${{ matrix.target-arch || '' }}
+          YTGRAB_MAX_GLIBC: ${{ matrix.max-glibc || '' }}
         run: pyinstaller --noconfirm --clean ytgrab.spec
 
       # Prove the binary actually runs and found a working ffmpeg, rather than
