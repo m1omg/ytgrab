@@ -12,9 +12,9 @@ import androidx.core.content.FileProvider
 import java.io.File
 import java.io.IOException
 
-/** Moves a finished download into Download/ytgrab, where every file manager sees it. */
+/** Moves a finished download into Download/DLPizer, where every file manager sees it. */
 object Saver {
-    private const val SUBDIR = "ytgrab"
+    private const val SUBDIR = "DLPizer"
     private val folder = "${Environment.DIRECTORY_DOWNLOADS}/$SUBDIR"
 
     // Types Android's own table doesn't know, or gets wrong for these files.

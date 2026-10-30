@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ytgrab</title>
+<title>DLPizer</title>
 <style>
   :root {
     --bg: #0f1115;
@@ -120,7 +120,7 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>yt<span>grab</span></h1>
+  <h1>DLP<span>izer</span></h1>
   <div class="sub">{{ t.web_tagline }}</div>
 
   <div class="card">
@@ -254,6 +254,7 @@ let poll = null;
 let busy = false;    // whether the queue has anything running or waiting
 
 // Choices are remembered in this browser, as the desktop app remembers them.
+// The key is the app's old name, so choices made before the rename carry over.
 const saved = (() => {
   try { return JSON.parse(localStorage.getItem("ytgrab") || "{}") || {}; } catch (e) { return {}; }
 })();

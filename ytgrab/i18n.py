@@ -1,4 +1,4 @@
-"""Interface strings for ytgrab, in English and Slovak.
+"""Interface strings for DLPizer, in English and Slovak.
 
 The whole app reads its text through :func:`t`. The active language is a
 module-level setting so the download engine can produce localised error
@@ -24,7 +24,7 @@ STRINGS = {
         "login_menu": "Use YouTube login from browser",
         "login_off": "Off",
         "login_note_title": "Using your YouTube login",
-        "login_note_body": ("ytgrab will read your YouTube cookies from {browser} on this "
+        "login_note_body": ("DLPizer will read your YouTube cookies from {browser} on this "
                             "computer and send them only to YouTube, so its requests go out "
                             "signed in - which is what YouTube's bot check asks for.\n\n"
                             "You need to be signed in to YouTube in {browser}. YouTube can "
@@ -154,28 +154,28 @@ STRINGS = {
         "update_checking": "Checking for updates…",
         "update_title": "Update available",
         "update_none_title": "No update",
-        "update_latest": "You have the newest version, ytgrab {version}.",
-        "update_available": "ytgrab {new} is available - you have {current}.",
+        "update_latest": "You have the newest version, DLPizer {version}.",
+        "update_available": "DLPizer {new} is available - you have {current}.",
         "update_changes": "What's new:",
-        "update_ask": ("Update now? ytgrab downloads it ({size}), replaces itself and starts "
+        "update_ask": ("Update now? DLPizer downloads it ({size}), replaces itself and starts "
                        "again. Your settings stay as they are."),
-        "update_ask_plain": ("Update now? ytgrab downloads it, replaces itself and starts "
+        "update_ask_plain": ("Update now? DLPizer downloads it, replaces itself and starts "
                              "again. Your settings stay as they are."),
         "update_ask_page": "Open the page to download it?",
         "update_now": "Update and restart",
         "update_later": "Not now",
         "update_open_page": "Open download page",
-        "update_downloading": "Downloading ytgrab {version}…",
-        "update_after_downloads": "ytgrab {version} is out - you'll be asked once the downloads finish.",
-        "update_restart_failed": "ytgrab {version} is installed. Start it again to use it.",
+        "update_downloading": "Downloading DLPizer {version}…",
+        "update_after_downloads": "DLPizer {version} is out - you'll be asked once the downloads finish.",
+        "update_restart_failed": "DLPizer {version} is installed. Start it again to use it.",
         "update_check_failed_title": "Couldn't check for updates",
         "update_check_failed": "GitHub couldn't be reached: {error}",
         "update_failed_title": "Update failed",
-        "update_failed": ("ytgrab couldn't update itself: {error}\n\n"
+        "update_failed": ("DLPizer couldn't update itself: {error}\n\n"
                           "You can download the new version from the release page instead."),
         "update_incomplete": "the download was cut short",
         "update_corrupt": "the downloaded file is damaged",
-        "update_bad_reply": "GitHub sent an answer ytgrab doesn't understand",
+        "update_bad_reply": "GitHub sent an answer DLPizer doesn't understand",
         "update_cant_write": "it can't write to {folder} ({reason})",
 
         # -- status bar --
@@ -219,12 +219,12 @@ STRINGS = {
         "stage_Cut": "Cutting out the part",
 
         # -- engine errors --
-        "err_file_locked": ("Windows wouldn't let ytgrab finish the file: another program kept it "
+        "err_file_locked": ("Windows wouldn't let DLPizer finish the file: another program kept it "
                             "open - usually antivirus or a sync app like OneDrive. Try again; if it "
                             "keeps happening, let that program skip your download folder, or save "
                             "to another folder."),
         "err_bot": ("YouTube asked this machine to confirm it isn't a bot, and stopped the "
-                    "other ways ytgrab tried as well. Waiting a while or switching networks "
+                    "other ways DLPizer tried as well. Waiting a while or switching networks "
                     "usually clears it. If it keeps happening, sign in to YouTube in your "
                     "browser and pick that browser under Options → Use YouTube login from "
                     "browser."),
@@ -276,7 +276,7 @@ STRINGS = {
         "login_menu": "Použiť prihlásenie do YouTube z prehliadača",
         "login_off": "Vypnuté",
         "login_note_title": "Použitie vášho prihlásenia do YouTube",
-        "login_note_body": ("ytgrab načíta vaše cookies pre YouTube z prehliadača {browser} "
+        "login_note_body": ("DLPizer načíta vaše cookies pre YouTube z prehliadača {browser} "
                             "v tomto počítači a pošle ich výhradne službe YouTube, takže jeho "
                             "požiadavky pôjdu ako od prihláseného používateľa – presne to "
                             "kontrola robotov vyžaduje.\n\n"
@@ -411,28 +411,28 @@ STRINGS = {
         "update_checking": "Hľadajú sa aktualizácie…",
         "update_title": "K dispozícii je aktualizácia",
         "update_none_title": "Žiadna aktualizácia",
-        "update_latest": "Máte najnovšiu verziu, ytgrab {version}.",
-        "update_available": "K dispozícii je ytgrab {new} – vy máte {current}.",
+        "update_latest": "Máte najnovšiu verziu, DLPizer {version}.",
+        "update_available": "K dispozícii je DLPizer {new} – vy máte {current}.",
         "update_changes": "Čo je nové:",
-        "update_ask": ("Aktualizovať teraz? ytgrab novú verziu stiahne ({size}), nahradí sa ňou "
+        "update_ask": ("Aktualizovať teraz? DLPizer novú verziu stiahne ({size}), nahradí sa ňou "
                        "a znova sa spustí. Nastavenia zostanú tak, ako sú."),
-        "update_ask_plain": ("Aktualizovať teraz? ytgrab novú verziu stiahne, nahradí sa ňou "
+        "update_ask_plain": ("Aktualizovať teraz? DLPizer novú verziu stiahne, nahradí sa ňou "
                              "a znova sa spustí. Nastavenia zostanú tak, ako sú."),
         "update_ask_page": "Otvoriť stránku, kde si ju stiahnete?",
         "update_now": "Aktualizovať a reštartovať",
         "update_later": "Teraz nie",
         "update_open_page": "Otvoriť stránku na stiahnutie",
-        "update_downloading": "Sťahuje sa ytgrab {version}…",
-        "update_after_downloads": "Vyšiel ytgrab {version} – ponúkne sa po dokončení sťahovania.",
-        "update_restart_failed": "ytgrab {version} je nainštalovaný. Spustite ho znova.",
+        "update_downloading": "Sťahuje sa DLPizer {version}…",
+        "update_after_downloads": "Vyšiel DLPizer {version} – ponúkne sa po dokončení sťahovania.",
+        "update_restart_failed": "DLPizer {version} je nainštalovaný. Spustite ho znova.",
         "update_check_failed_title": "Aktualizácie sa nepodarilo zistiť",
         "update_check_failed": "GitHub sa nepodarilo kontaktovať: {error}",
         "update_failed_title": "Aktualizácia zlyhala",
-        "update_failed": ("ytgrab sa nepodarilo aktualizovať: {error}\n\n"
+        "update_failed": ("DLPizer sa nepodarilo aktualizovať: {error}\n\n"
                           "Novú verziu si môžete stiahnuť zo stránky s vydaniami."),
         "update_incomplete": "sťahovanie sa prerušilo",
         "update_corrupt": "stiahnutý súbor je poškodený",
-        "update_bad_reply": "GitHub poslal odpoveď, ktorej ytgrab nerozumie",
+        "update_bad_reply": "GitHub poslal odpoveď, ktorej DLPizer nerozumie",
         "update_cant_write": "nemôže zapisovať do {folder} ({reason})",
 
         # -- status bar --
@@ -476,12 +476,12 @@ STRINGS = {
         "stage_Cut": "Vystrihovanie časti",
 
         # -- engine errors --
-        "err_file_locked": ("Windows nedovolil ytgrabu súbor dokončiť: mal ho otvorený iný program – "
+        "err_file_locked": ("Windows nedovolil aplikácii DLPizer súbor dokončiť: mal ho otvorený iný program – "
                             "zvyčajne antivírus alebo synchronizácia ako OneDrive. Skúste to znova; "
                             "ak sa to opakuje, nastavte tomu programu, aby váš priečinok na "
                             "sťahovanie vynechal, alebo ukladajte inam."),
         "err_bot": ("YouTube žiada od tohto počítača potvrdenie, že nie je robot, a zastavil "
-                    "aj ostatné spôsoby, ktoré ytgrab skúsil. Zvyčajne pomôže chvíľu počkať "
+                    "aj ostatné spôsoby, ktoré DLPizer skúsil. Zvyčajne pomôže chvíľu počkať "
                     "alebo prejsť na inú sieť. Ak sa to opakuje, prihláste sa do YouTube "
                     "v prehliadači a vyberte ho v ponuke Možnosti → Použiť prihlásenie do "
                     "YouTube z prehliadača."),

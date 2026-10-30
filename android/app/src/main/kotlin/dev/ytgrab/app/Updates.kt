@@ -37,7 +37,7 @@ object Updates {
         val version = json.getString("tag_name").trim().removePrefix("v")
         if (!newer(version, BuildConfig.VERSION_NAME)) return@withContext null
         // The APK built for the same phones as this one: arm64, arm32 or universal.
-        val wanted = "ytgrab-android-${BuildConfig.FLAVOR}.apk"
+        val wanted = "DLPizer-android-${BuildConfig.FLAVOR}.apk"
         val assets = json.getJSONArray("assets")
         val asset = (0 until assets.length()).map(assets::getJSONObject)
             .firstOrNull { it.optString("name") == wanted } ?: return@withContext null
@@ -71,7 +71,7 @@ object Updates {
         withContext(Dispatchers.IO) {
             val dir = File(context.cacheDir, "updates").apply { mkdirs() }
             dir.listFiles()?.forEach { it.delete() }
-            val apk = File(dir, "ytgrab-${update.version}.apk")
+            val apk = File(dir, "DLPizer-${update.version}.apk")
             val digest = MessageDigest.getInstance("SHA-256")
             var done = 0L
             try {
@@ -111,7 +111,7 @@ object Updates {
 
     /**
      * Hand the APK to Android's installer. It asks before replacing the app,
-     * and the first time also asks to allow ytgrab to install apps.
+     * and the first time also asks to allow DLPizer to install apps.
      */
     fun install(context: Context, apk: File) {
         val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", apk)
@@ -126,7 +126,7 @@ object Updates {
             connectTimeout = 20_000
             readTimeout = 30_000
             setRequestProperty("Accept", accept)
-            setRequestProperty("User-Agent", "ytgrab/${BuildConfig.VERSION_NAME}")
+            setRequestProperty("User-Agent", "DLPizer/${BuildConfig.VERSION_NAME}")
             if (responseCode !in 200..299) throw IOException("HTTP $responseCode")
         }
 }

@@ -1,4 +1,4 @@
-"""Finding, fetching and installing a newer ytgrab from the GitHub releases.
+"""Finding, fetching and installing a newer DLPizer from the GitHub releases.
 
 A packaged build replaces itself. On Windows and Linux the app is one file,
 swapped for the new one; on macOS the whole .app is. Windows won't let a
@@ -71,13 +71,13 @@ def asset_name():
     """The file in each release that this build is, or None where there's none."""
     machine = platform.machine().lower()
     if sys.platform == "win32":
-        return "ytgrab-windows-x86_64.exe" if machine in ("amd64", "x86_64") else None
+        return "DLPizer-windows-x86_64.exe" if machine in ("amd64", "x86_64") else None
     if sys.platform == "darwin":
         # The running program's own architecture: the Intel build stays Intel
         # under Rosetta.
-        return "ytgrab-macos-%s.zip" % ("arm64" if machine == "arm64" else "x86_64")
+        return "DLPizer-macos-%s.zip" % ("arm64" if machine == "arm64" else "x86_64")
     if sys.platform.startswith("linux") and machine in ("x86_64", "amd64"):
-        return "ytgrab-linux-x86_64"
+        return "DLPizer-linux-x86_64"
     return None
 
 
@@ -122,7 +122,7 @@ def _context():
 
 def _open(url, accept, timeout=_TIMEOUT):
     request = urllib.request.Request(url, headers={
-        "Accept": accept, "User-Agent": f"ytgrab/{__version__}"})
+        "Accept": accept, "User-Agent": f"DLPizer/{__version__}"})
     try:
         return urllib.request.urlopen(request, timeout=timeout, context=_context())
     except urllib.error.HTTPError as exc:

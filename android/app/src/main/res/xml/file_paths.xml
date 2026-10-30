@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
-    <external-path name="downloads" path="Download/ytgrab/" />
+    <external-path name="downloads" path="Download/DLPizer/" />
     <cache-path name="updates" path="updates/" />
 </paths>

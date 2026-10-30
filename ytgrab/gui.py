@@ -307,8 +307,10 @@ class QueuePanel(QWidget):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle(f"ytgrab {__version__}")
+        self.setWindowTitle(f"DLPizer {__version__}")
         self.setMinimumWidth(620)
+        # Still filed under the app's old name, so choices made before the
+        # rename to DLPizer carry over.
         self.settings = QSettings("ytgrab", "ytgrab")
         # The folder chosen last time, while it still exists.
         saved_dir = self.settings.value("save_dir")
@@ -363,7 +365,9 @@ class MainWindow(QMainWindow):
         self.update_bridge.installed.connect(self._on_update_installed)
         self.update_bridge.install_failed.connect(self._on_update_failed)
         self.update_bridge.cancelled.connect(self._on_update_cancelled)
-        self.update_checking = False
+        # Checking, asking or installing: one at a time, so the check at start
+        # can't open a second question over one asked for by hand.
+        self.update_busy = False
         self.update_dialog = None
         self.pending_update = None   # offered once the downloads have finished
         # A packaged build looks for a newer one shortly after it opens;
@@ -1126,9 +1130,9 @@ class MainWindow(QMainWindow):
 
     def check_updates(self, manual=False):
         """Ask GitHub for a newer release, off the window's thread."""
-        if self.update_checking or self.update_dialog is not None:
+        if self.update_busy:
             return
-        self.update_checking = True
+        self.update_busy = True
         if manual:
             self.statusBar().showMessage(t("update_checking"))
         bridge = self.update_bridge
@@ -1142,10 +1146,10 @@ class MainWindow(QMainWindow):
         threading.Thread(target=run, daemon=True).start()
 
     def _on_update_checked(self, release, manual):
-        self.update_checking = False
         if manual:
             self.statusBar().showMessage(self._ffmpeg_status())
         if release is None:
+            self.update_busy = False
             if manual:
                 QMessageBox.information(self, t("update_none_title"),
                                         t("update_latest", version=__version__))
@@ -1153,7 +1157,7 @@ class MainWindow(QMainWindow):
         self._offer_update(release)
 
     def _on_update_check_failed(self, error, manual):
-        self.update_checking = False
+        self.update_busy = False
         # A check made by itself stays quiet: no network is no news.
         if manual:
             self.statusBar().showMessage(self._ffmpeg_status())
@@ -1161,8 +1165,10 @@ class MainWindow(QMainWindow):
                                 t("update_check_failed", error=error))
 
     def _offer_update(self, release):
+        self.update_busy = True
         if self.queue.busy():
             # Restarting would cut the downloads short; ask once they're done.
+            self.update_busy = False
             self.pending_update = release
             self.statusBar().showMessage(t("update_after_downloads", version=release.version), 8000)
             return
@@ -1186,11 +1192,11 @@ class MainWindow(QMainWindow):
         box.addButton(t("update_later"), QMessageBox.RejectRole)
         box.setDefaultButton(go)
         box.exec()
-        if box.clickedButton() is not go:
+        if box.clickedButton() is go and installable:
+            self._install_update(release, target)  # busy until it ends
             return
-        if installable:
-            self._install_update(release, target)
-        else:
+        self.update_busy = False
+        if box.clickedButton() is go:
             QDesktopServices.openUrl(QUrl(release.page))
 
     def _install_update(self, release, target):
@@ -1235,6 +1241,7 @@ class MainWindow(QMainWindow):
         dialog.setLabelText(label)
 
     def _close_update_dialog(self):
+        self.update_busy = False
         dialog, self.update_dialog = self.update_dialog, None
         if dialog is not None:
             dialog.canceled.disconnect()
@@ -1303,8 +1310,8 @@ def startup_language():
 
 def main():
     app = QApplication(sys.argv)
-    # No display name: Qt would add it to the title, as "ytgrab 1.4.1 - ytgrab".
-    app.setApplicationName("ytgrab")
+    # No display name: Qt would add it to the title, as "DLPizer 1.6.0 - DLPizer".
+    app.setApplicationName("DLPizer")
     app.setWindowIcon(make_icon())
     i18n.set_language(startup_language())
     win = MainWindow()

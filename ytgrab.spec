@@ -1,5 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""PyInstaller spec for ytgrab.
+"""PyInstaller spec for DLPizer.
 
 Linux and Windows build a single self-contained executable. macOS builds a
 normal .app directory instead: a onefile app unpacks its entire payload to a
@@ -191,7 +191,7 @@ if sys.platform.startswith("linux"):
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
 common = dict(
-    name="ytgrab",
+    name="DLPizer",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -215,17 +215,17 @@ if ONEDIR:
         a.datas,
         strip=False,
         upx=False,
-        name="ytgrab",
+        name="DLPizer",
     )
     app = BUNDLE(
         coll,
-        name="ytgrab.app",
+        name="DLPizer.app",
         icon=None,
-        bundle_identifier="dev.ytgrab.app",
+        bundle_identifier="dev.ytgrab.app",  # kept from the old name,
         info_plist={
             "NSHighResolutionCapable": True,
             "LSMinimumSystemVersion": "12.0",
-            "CFBundleShortVersionString": "1.5.1",
+            "CFBundleShortVersionString": "1.6.0",
         },
     )
 else:
