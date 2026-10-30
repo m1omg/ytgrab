@@ -407,9 +407,9 @@ class MainWindow(QMainWindow):
         self.update_auto_action = QAction(self)
         self.update_auto_action.setCheckable(True)
         self.update_auto_action.setChecked(
-            QSettings("ytgrab", "ytgrab").value("check_updates", True, type=bool))
+            self.settings.value("check_updates", True, type=bool))
         self.update_auto_action.toggled.connect(
-            lambda on: QSettings("ytgrab", "ytgrab").setValue("check_updates", on))
+            lambda on: self.settings.setValue("check_updates", on))
         self.update_now_action = QAction(self)
         self.update_now_action.triggered.connect(lambda: self.check_updates(manual=True))
         self.options_menu.addAction(self.update_auto_action)
