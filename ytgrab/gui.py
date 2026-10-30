@@ -4,7 +4,7 @@ import sys
 import threading
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QObject, QThread, Signal, QUrl, QPoint, QLocale, QSettings
+from PySide6.QtCore import Qt, QObject, QThread, QTimer, Signal, QUrl, QPoint, QLocale, QSettings
 from PySide6.QtGui import (
     QPixmap, QImage, QDesktopServices, QIcon, QPainter, QColor, QPolygon,
     QAction, QActionGroup, QPalette,
@@ -13,10 +13,10 @@ from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QLabel, QLineEdit, QPushButton, QComboBox, QCheckBox, QProgressBar,
     QRadioButton, QButtonGroup, QStackedWidget, QFileDialog, QFrame,
-    QGroupBox, QMessageBox, QScrollArea, QSizePolicy,
+    QGroupBox, QMessageBox, QProgressDialog, QScrollArea, QSizePolicy,
 )
 
-from . import core, i18n, jobs, __version__
+from . import core, i18n, jobs, updater, __version__
 from .i18n import t, tn
 
 ERROR_STYLE = "color: #e53935;"
@@ -80,6 +80,17 @@ class QueueBridge(QObject):
     """Carries the queue's news from its thread to the window's."""
 
     changed = Signal(object)  # a Job, or None when the list itself changed
+
+
+class UpdateBridge(QObject):
+    """Carries an update's news from its thread to the window's."""
+
+    checked = Signal(object, bool)      # the newer Release or None; asked for by hand
+    check_failed = Signal(str, bool)
+    progress = Signal(object, object)   # bytes so far, bytes in all
+    installed = Signal()
+    install_failed = Signal(str)
+    cancelled = Signal()
 
 
 # --------------------------------------------------------------------------
@@ -298,7 +309,15 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle(f"ytgrab {__version__}")
         self.setMinimumWidth(620)
-        self.dest_dir = core.default_download_dir()
+        self.settings = QSettings("ytgrab", "ytgrab")
+        # The folder chosen last time, while it still exists.
+        saved_dir = self.settings.value("save_dir")
+        self.dest_dir = (Path(saved_dir) if saved_dir and Path(saved_dir).is_dir()
+                         else core.default_download_dir())
+        # The resolution picked last, a ceiling: a video without it gets the
+        # highest one under it, and the choice survives for the next video.
+        saved_height = str(self.settings.value("video_height", "best"))
+        self.video_height = saved_height if saved_height.isdigit() else "best"
         self.info_worker = None
         self.thumb_token = 0      # which read the thumbnail on screen belongs to
         self.info = None          # last metadata read, for relabelling
@@ -333,8 +352,26 @@ class MainWindow(QMainWindow):
         layout.addStretch(1)
         self.root_layout = layout
 
+        self._restore_choices()
         self.retranslate()
         self._sync_mode()
+
+        self.update_bridge = UpdateBridge()
+        self.update_bridge.checked.connect(self._on_update_checked)
+        self.update_bridge.check_failed.connect(self._on_update_check_failed)
+        self.update_bridge.progress.connect(self._on_update_progress)
+        self.update_bridge.installed.connect(self._on_update_installed)
+        self.update_bridge.install_failed.connect(self._on_update_failed)
+        self.update_bridge.cancelled.connect(self._on_update_cancelled)
+        self.update_checking = False
+        self.update_dialog = None
+        self.pending_update = None   # offered once the downloads have finished
+        # A packaged build looks for a newer one shortly after it opens;
+        # from source there's nothing it could replace.
+        if updater.install_target() is not None:
+            threading.Thread(target=updater.clean_up, daemon=True).start()
+            if self.update_auto_action.isChecked():
+                QTimer.singleShot(3000, self.check_updates)
 
     # -- construction ------------------------------------------------------
 
@@ -365,6 +402,18 @@ class MainWindow(QMainWindow):
             login_group.addAction(action)
             self.login_menu.addAction(action)
             self.login_actions[key] = action
+
+        self.options_menu.addSeparator()
+        self.update_auto_action = QAction(self)
+        self.update_auto_action.setCheckable(True)
+        self.update_auto_action.setChecked(
+            self.settings.value("check_updates", True, type=bool))
+        self.update_auto_action.toggled.connect(
+            lambda on: self.settings.setValue("check_updates", on))
+        self.update_now_action = QAction(self)
+        self.update_now_action.triggered.connect(lambda: self.check_updates(manual=True))
+        self.options_menu.addAction(self.update_auto_action)
+        self.options_menu.addAction(self.update_now_action)
 
     def _build_url_row(self):
         box = QWidget()
@@ -473,6 +522,7 @@ class MainWindow(QMainWindow):
         g.addWidget(self.container_combo, 1, 1)
         g.setColumnStretch(1, 1)
         self.opt_stack.addWidget(video)
+        self.res_combo.activated.connect(self._on_height_chosen)
 
         # audio
         audio = QWidget()
@@ -584,6 +634,49 @@ class MainWindow(QMainWindow):
         self.download_btn.clicked.connect(self.start_download)
         return self.download_btn
 
+    # -- remembered choices ------------------------------------------------
+
+    def _remembered_combos(self):
+        return [(self.container_combo, "container"), (self.acodec_combo, "audio_stream"),
+                (self.bitrate_combo, "mp3_quality"), (self.tfmt_combo, "transcript_format")]
+
+    def _restore_choices(self):
+        """Put back what was chosen last time, and keep each new choice.
+
+        Every choice is saved the moment it is made, so a crash or a closed
+        laptop doesn't lose it. Anything unknown keeps its default.
+        """
+        settings = self.settings
+        mode = settings.value("mode")
+        if mode in self.mode_buttons:
+            self.mode_buttons[mode].setChecked(True)
+        self.mode_group.buttonClicked.connect(
+            lambda _button: settings.setValue("mode", self.current_mode()))
+
+        for combo, key in self._remembered_combos():
+            index = combo.findData(settings.value(key))
+            if index >= 0:
+                combo.setCurrentIndex(index)
+            combo.activated.connect(
+                lambda _index, c=combo, k=key: settings.setValue(k, c.currentData()))
+
+        self.embed_check.setChecked(settings.value("embed_thumbnail", True, type=bool))
+        self.embed_check.toggled.connect(
+            lambda on: settings.setValue("embed_thumbnail", on))
+        # Nothing is read yet, so every standard resolution is on offer.
+        self._fill_resolutions(core.STANDARD_HEIGHTS)
+
+    def _on_height_chosen(self):
+        self.video_height = self.res_combo.currentData()
+        self.settings.setValue("video_height", self.video_height)
+
+    def _height_for(self, heights):
+        """The remembered resolution, or the highest of these under it."""
+        if self.video_height == "best":
+            return "best"
+        fitting = [h for h in heights if h <= int(self.video_height)]
+        return str(max(fitting)) if fitting else "best"
+
     # -- language ----------------------------------------------------------
 
     def set_language(self, code):
@@ -626,9 +719,7 @@ class MainWindow(QMainWindow):
         previous = self.tlang_combo.currentData()
         self.tlang_combo.clear()
         for entry in self.transcripts:
-            label = (t("transcript_auto", code=entry["code"]) if entry["auto"]
-                     else entry["code"])
-            self.tlang_combo.addItem(label, entry["code"])
+            self.tlang_combo.addItem(core.transcript_label(entry), entry["code"])
         if not self.transcripts:
             self.tlang_combo.addItem(t("transcript_none"), "")
             return
@@ -637,13 +728,12 @@ class MainWindow(QMainWindow):
             found if found >= 0 else self._default_transcript_index())
 
     def _fill_resolutions(self, heights):
-        """Offer these heights after "Best", keeping the current choice if it's still there."""
-        previous = self.res_combo.currentData()
+        """Offer these heights after "Best", showing the remembered choice."""
         self.res_combo.clear()
         self.res_combo.addItem(t("best_available"), "best")
         for h in heights:
             self.res_combo.addItem(f"{h}p", str(h))
-        found = self.res_combo.findData(previous)
+        found = self.res_combo.findData(self._height_for(heights))
         self.res_combo.setCurrentIndex(max(found, 0))
 
     def retranslate(self):
@@ -654,6 +744,8 @@ class MainWindow(QMainWindow):
         self.options_menu.setTitle(t("menu_options"))
         self.login_menu.setTitle(t("login_menu"))
         self.login_actions[None].setText(t("login_off"))
+        self.update_auto_action.setText(t("menu_updates_auto"))
+        self.update_now_action.setText(t("menu_updates_now"))
 
         self.link_label.setText(t("link"))
         self.url_edit.setPlaceholderText(t("url_placeholder"))
@@ -708,7 +800,14 @@ class MainWindow(QMainWindow):
 
     def _ffmpeg_status(self):
         loc = core.ffmpeg_location()
-        return t("ffmpeg_at", path=loc) if loc else t("ffmpeg_status_missing")
+        if not loc:
+            return t("ffmpeg_status_missing")
+        # The one inside a packaged app lives in a temporary folder whose name
+        # means nothing to anyone.
+        unpacked = getattr(sys, "_MEIPASS", None)
+        if unpacked and Path(loc).resolve().is_relative_to(Path(unpacked).resolve()):
+            return t("ffmpeg_bundled")
+        return t("ffmpeg_at", path=loc)
 
     def current_mode(self):
         for key, btn in self.mode_buttons.items():
@@ -809,7 +908,9 @@ class MainWindow(QMainWindow):
             self.links = several
             self.thumb_token += 1  # a thumbnail still loading belongs to the old link
             self.thumb_label.clear()
-            self._fill_resolutions(core.STANDARD_HEIGHTS if several else [])
+            # Until a video is read its own resolutions aren't known; each
+            # standard one is a ceiling that fits any video.
+            self._fill_resolutions(core.STANDARD_HEIGHTS)
             self.transcripts = core.common_transcripts(i18n.language()) if several else []
             self._fill_transcript_langs()
             # Times typed for one video rarely fit the next; they stay in the
@@ -935,6 +1036,7 @@ class MainWindow(QMainWindow):
         if chosen:
             self.dest_dir = Path(chosen)
             self.dest_edit.setText(chosen)
+            self.settings.setValue("save_dir", chosen)
 
     def show_file(self, job):
         target = job.path.parent if job.path else Path(job.dest)
@@ -1009,6 +1111,9 @@ class MainWindow(QMainWindow):
             elif job.state == jobs.FAILED:
                 self.statusBar().showMessage(t("failed"), 6000)
         self._sync_download_btn()
+        if self.pending_update and not self.queue.busy():
+            release, self.pending_update = self.pending_update, None
+            QTimer.singleShot(0, lambda: self._offer_update(release))
 
     def _show_queue(self, visible):
         """The list takes the window's spare height while there's anything in it."""
@@ -1016,6 +1121,150 @@ class MainWindow(QMainWindow):
         layout = self.root_layout
         layout.setStretchFactor(self.queue_panel, 1 if visible else 0)
         layout.setStretch(layout.count() - 1, 0 if visible else 1)
+
+    # -- updates -----------------------------------------------------------
+
+    def check_updates(self, manual=False):
+        """Ask GitHub for a newer release, off the window's thread."""
+        if self.update_checking or self.update_dialog is not None:
+            return
+        self.update_checking = True
+        if manual:
+            self.statusBar().showMessage(t("update_checking"))
+        bridge = self.update_bridge
+
+        def run():
+            try:
+                bridge.checked.emit(updater.check(), manual)
+            except Exception as exc:  # noqa: BLE001 - reported, or ignored if automatic
+                bridge.check_failed.emit(str(exc), manual)
+
+        threading.Thread(target=run, daemon=True).start()
+
+    def _on_update_checked(self, release, manual):
+        self.update_checking = False
+        if manual:
+            self.statusBar().showMessage(self._ffmpeg_status())
+        if release is None:
+            if manual:
+                QMessageBox.information(self, t("update_none_title"),
+                                        t("update_latest", version=__version__))
+            return
+        self._offer_update(release)
+
+    def _on_update_check_failed(self, error, manual):
+        self.update_checking = False
+        # A check made by itself stays quiet: no network is no news.
+        if manual:
+            self.statusBar().showMessage(self._ffmpeg_status())
+            QMessageBox.warning(self, t("update_check_failed_title"),
+                                t("update_check_failed", error=error))
+
+    def _offer_update(self, release):
+        if self.queue.busy():
+            # Restarting would cut the downloads short; ask once they're done.
+            self.pending_update = release
+            self.statusBar().showMessage(t("update_after_downloads", version=release.version), 8000)
+            return
+        target = updater.install_target()
+        installable = bool(target and release.url and updater.can_replace(target))
+
+        text = t("update_available", new=release.version, current=__version__)
+        if release.changes:
+            text += "\n\n" + t("update_changes") + "\n" + "\n".join(
+                "• " + change for change in release.changes[:8])
+        size = core.format_size(release.size)
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Information)
+        box.setWindowTitle(t("update_title"))
+        box.setText(text)
+        box.setInformativeText(
+            (t("update_ask", size=size) if size else t("update_ask_plain")) if installable
+            else t("update_ask_page"))
+        go = box.addButton(t("update_now") if installable else t("update_open_page"),
+                           QMessageBox.AcceptRole)
+        box.addButton(t("update_later"), QMessageBox.RejectRole)
+        box.setDefaultButton(go)
+        box.exec()
+        if box.clickedButton() is not go:
+            return
+        if installable:
+            self._install_update(release, target)
+        else:
+            QDesktopServices.openUrl(QUrl(release.page))
+
+    def _install_update(self, release, target):
+        """Download the new version with a progress window, then swap and restart."""
+        self.update_release, self.update_target = release, target
+        dialog = QProgressDialog(t("update_downloading", version=release.version),
+                                 t("cancel"), 0, 0, self)
+        dialog.setWindowTitle(t("update_title"))
+        dialog.setWindowModality(Qt.WindowModal)
+        dialog.setMinimumDuration(0)
+        dialog.setAutoClose(False)
+        dialog.setAutoReset(False)
+        stop = threading.Event()
+        dialog.canceled.connect(stop.set)
+        self.update_dialog = dialog
+        dialog.show()
+        bridge = self.update_bridge
+
+        def run():
+            try:
+                updater.install(release, target,
+                                progress=lambda done, total: bridge.progress.emit(done, total),
+                                cancelled=stop.is_set)
+            except updater.Cancelled:
+                bridge.cancelled.emit()
+            except Exception as exc:  # noqa: BLE001 - shown to the person
+                bridge.install_failed.emit(str(exc))
+            else:
+                bridge.installed.emit()
+
+        threading.Thread(target=run, daemon=True).start()
+
+    def _on_update_progress(self, done, total):
+        dialog = self.update_dialog
+        if dialog is None:
+            return
+        label = t("update_downloading", version=self.update_release.version)
+        if total:
+            dialog.setMaximum(100)
+            dialog.setValue(min(100, done * 100 // total))
+            label += f"\n{core.format_size(done)} / {core.format_size(total)}"
+        dialog.setLabelText(label)
+
+    def _close_update_dialog(self):
+        dialog, self.update_dialog = self.update_dialog, None
+        if dialog is not None:
+            dialog.canceled.disconnect()
+            dialog.close()
+            dialog.deleteLater()
+
+    def _on_update_installed(self):
+        self._close_update_dialog()
+        try:
+            updater.relaunch(self.update_target)
+        except OSError:
+            QMessageBox.information(self, t("update_title"),
+                                    t("update_restart_failed", version=self.update_release.version))
+        self.close()
+        QApplication.quit()
+
+    def _on_update_failed(self, error):
+        self._close_update_dialog()
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Warning)
+        box.setWindowTitle(t("update_failed_title"))
+        box.setText(t("update_failed", error=error))
+        page = box.addButton(t("update_open_page"), QMessageBox.AcceptRole)
+        box.addButton(QMessageBox.Close)
+        box.exec()
+        if box.clickedButton() is page:
+            QDesktopServices.openUrl(QUrl(self.update_release.page))
+
+    def _on_update_cancelled(self):
+        self._close_update_dialog()
 
     def closeEvent(self, event):
         pending = [job for job in self.queue.jobs()
@@ -1054,8 +1303,8 @@ def startup_language():
 
 def main():
     app = QApplication(sys.argv)
+    # No display name: Qt would add it to the title, as "ytgrab 1.4.1 - ytgrab".
     app.setApplicationName("ytgrab")
-    app.setApplicationDisplayName("ytgrab")
     app.setWindowIcon(make_icon())
     i18n.set_language(startup_language())
     win = MainWindow()

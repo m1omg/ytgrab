@@ -137,4 +137,18 @@
     <string name="notif_count_saved">Saved: %1$d</string>
     <string name="notif_count_failed">Failed: %1$d</string>
     <string name="notif_count_cancelled">Cancelled: %1$d</string>
+    <string name="transcript_manual">%1$s - written by people</string>
+    <string name="transcript_original">%1$s - original, automatic</string>
+    <string name="transcript_original_any">Each video\'s own language (automatic)</string>
+    <string name="transcript_translated">%1$s - automatic translation</string>
+    <string name="summary_original">%1$s, original</string>
+    <string name="summary_original_any">original language</string>
+    <string name="update_available">ytgrab %1$s is available - you have %2$s.</string>
+    <string name="update_install_note">Android asks you to confirm the update, and the first time also to allow ytgrab to install apps.</string>
+    <string name="update_downloading">Downloading the update… %1$d%%</string>
+    <string name="update_failed">The update couldn\'t be downloaded: %1$s</string>
+    <string name="update_incomplete">the download was cut short</string>
+    <string name="update_corrupt">the downloaded file is damaged</string>
+    <string name="update_now">Update</string>
+    <string name="update_later">Not now</string>
 </resources>

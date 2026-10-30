@@ -39,6 +39,9 @@ STANDARD_HEIGHTS = (2160, 1440, 1080, 720, 480, 360)
 # text target, so txt is produced here by parsing the subtitle file instead -
 # which also means txt needs no ffmpeg.
 TRANSCRIPT_FORMATS = ("txt", "srt", "vtt")
+# The transcript "language" that means each video's own: YouTube's automatic
+# track in the language spoken, for several videos that may not share one.
+ORIGINAL = "orig"
 
 # Browsers a YouTube login can be borrowed from, keyed by yt-dlp's names.
 # Safari keeps its cookies somewhere yt-dlp can only read on macOS.
@@ -791,17 +794,50 @@ def fetch_info(url, cookies_browser=None):
 
 
 def common_transcripts(lang):
-    """Languages to offer when the videos aren't known one by one: YouTube
-    translates its automatic captions into nearly any language."""
-    return [{"code": code, "auto": False} for code in dict.fromkeys((lang, "en"))]
+    """Languages to offer when the videos aren't known one by one: each
+    video's own, or one of these - YouTube translates its automatic captions
+    into nearly any language."""
+    return ([{"code": ORIGINAL, "auto": True, "kind": "original"}]
+            + [{"code": code, "auto": False} for code in dict.fromkeys((lang, "en"))])
 
 
 def _transcripts(info):
-    # Manual tracks first: a human wrote them, so they read better than ASR.
-    manual = info.get("subtitles") or {}
+    """The transcripts worth offering, best first.
+
+    Tracks people wrote come first, then YouTube's automatic one in the
+    video's own language (yt-dlp calls it "en-orig" and so on), then its
+    machine translations into the app's languages. YouTube translates into
+    some 200 languages: offering them all buried the original, and an "en"
+    that is the same track sorted ahead of "en-orig".
+    """
+    manual = sorted(code for code in info.get("subtitles") or {} if code != "live_chat")
     automatic = info.get("automatic_captions") or {}
-    return ([{"code": c, "auto": False} for c in sorted(manual)]
-            + [{"code": c, "auto": True} for c in sorted(automatic) if c not in manual])
+    tracks = [{"code": code, "auto": False, "kind": "manual"} for code in manual]
+    originals = sorted(code for code in automatic if code.endswith("-orig"))
+    if not originals:
+        # A language YouTube can't translate has no "-orig" twin; its own
+        # track is all there is.
+        return tracks + [{"code": code, "auto": True, "kind": "original"}
+                         for code in sorted(automatic) if code not in manual]
+    tracks += [{"code": code, "auto": True, "kind": "original"} for code in originals]
+    for code in i18n.languages():
+        if code in automatic and code not in manual and f"{code}-orig" not in automatic:
+            tracks.append({"code": code, "auto": True, "kind": "translated"})
+    return tracks
+
+
+def transcript_label(track, lang=None):
+    """How a transcript track reads in a language list."""
+    code, kind = track["code"], track.get("kind")
+    if code == ORIGINAL:
+        return t("transcript_original_any", lang)
+    if kind == "manual":
+        return t("transcript_manual", lang, code=code)
+    if kind == "original":
+        return t("transcript_original", lang, code=code.removesuffix("-orig"))
+    if kind == "translated":
+        return t("transcript_translated", lang, code=code)
+    return t("transcript_auto", lang, code=code) if track.get("auto") else code
 
 
 def _thumbnail_urls(info, limit=6):
@@ -922,7 +958,9 @@ def build_opts(out_dir, mode, quality, container="mp4", embed_thumbnail=True,
         opts["writeautomaticsub"] = True
         # A concrete language, never "all": YouTube offers automatic
         # translations into ~200 of them and would write a file for each.
-        opts["subtitleslangs"] = [quality if quality and quality != "best" else "en"]
+        # yt-dlp reads these as patterns; ORIGINAL takes each video's own.
+        lang = quality if quality and quality != "best" else "en"
+        opts["subtitleslangs"] = [r".*-orig" if lang == ORIGINAL else re.escape(lang)]
         # vtt is what YouTube serves, so asking for it avoids a conversion.
         opts["subtitlesformat"] = "vtt/srt/best"
         if container == "srt":

@@ -151,4 +151,18 @@
     <string name="notif_count_saved">Uložené: %1$d</string>
     <string name="notif_count_failed">Zlyhalo: %1$d</string>
     <string name="notif_count_cancelled">Zrušené: %1$d</string>
+    <string name="transcript_manual">%1$s – napísané ľuďmi</string>
+    <string name="transcript_original">%1$s – pôvodné, automatické</string>
+    <string name="transcript_original_any">Pôvodný jazyk každého videa (automatické)</string>
+    <string name="transcript_translated">%1$s – automatický preklad</string>
+    <string name="summary_original">%1$s, pôvodné</string>
+    <string name="summary_original_any">pôvodný jazyk</string>
+    <string name="update_available">K dispozícii je ytgrab %1$s – vy máte %2$s.</string>
+    <string name="update_install_note">Android sa spýta, či aktualizáciu nainštalovať, a prvýkrát aj či ytgrabu dovolíte inštalovať aplikácie.</string>
+    <string name="update_downloading">Sťahuje sa aktualizácia… %1$d %%</string>
+    <string name="update_failed">Aktualizáciu sa nepodarilo stiahnuť: %1$s</string>
+    <string name="update_incomplete">sťahovanie sa prerušilo</string>
+    <string name="update_corrupt">stiahnutý súbor je poškodený</string>
+    <string name="update_now">Aktualizovať</string>
+    <string name="update_later">Teraz nie</string>
 </resources>

@@ -7,6 +7,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Hands a downloaded update to Android's installer, which still asks first. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- Android 10 and later save into Downloads without any permission. -->
     <uses-permission
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
@@ -42,7 +44,7 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
-        <!-- Hands saved files to other apps on Android 7-9. -->
+        <!-- Hands saved files to other apps on Android 7-9, and updates to the installer. -->
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.files"
