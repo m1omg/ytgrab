@@ -103,7 +103,8 @@ titulkov, takže je hotový za pár sekúnd. V zozname sú:
 
 * titulky *napísané ľuďmi*, ak ich video má;
 * *pôvodné* – automatické titulky YouTubu v jazyku, ktorým sa vo videu hovorí;
-* *automatický preklad* YouTubu do slovenčiny alebo angličtiny.
+* *automatické preklady* YouTubu: najprv slovenčina a angličtina, potom
+  všetky ďalšie jazyky, do ktorých YouTube prekladá.
 
 Aplikácia vyberie svoj jazyk, ak sa dá, potom angličtinu, a pôvodné titulky
 uprednostní pred prekladom – anglické video teda dostane pôvodné anglické
