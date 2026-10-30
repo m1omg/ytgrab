@@ -78,16 +78,16 @@ jobs:
           # anything bundled needs more than max-glibc.
           - os: ubuntu-24.04
             name: linux-x86_64
-            artifact: ytgrab-linux-x86_64
+            artifact: DLPizer-linux-x86_64
             qjs: linux-x86_64
             max-glibc: "2.39"
           - os: windows-latest
             name: windows-x86_64
-            artifact: ytgrab-windows-x86_64.exe
+            artifact: DLPizer-windows-x86_64.exe
             qjs: windows-x86_64
           - os: macos-latest
             name: macos-arm64
-            artifact: ytgrab-macos-arm64.zip
+            artifact: DLPizer-macos-arm64.zip
             python-arch: arm64
             # Qt 6.10+ needs macOS 15; 6.9.3 still supports macOS 12.
             pyside: PySide6-Essentials==6.9.3
@@ -98,7 +98,7 @@ jobs:
           # x86_64 -> arm64, so an arm64 host can run the x64 toolchain.
           - os: macos-latest
             name: macos-x86_64
-            artifact: ytgrab-macos-x86_64.zip
+            artifact: DLPizer-macos-x86_64.zip
             python-arch: x64
             target-arch: x86_64
             pyside: PySide6-Essentials==6.9.3
@@ -193,27 +193,27 @@ jobs:
         if: runner.os == 'Linux'
         env:
           QT_QPA_PLATFORM: offscreen
-        run: ./dist/ytgrab --selftest
+        run: ./dist/DLPizer --selftest
 
       - name: Smoke test (Windows)
         if: runner.os == 'Windows'
         env:
           QT_QPA_PLATFORM: offscreen
-        run: .\dist\ytgrab.exe --selftest
+        run: .\dist\DLPizer.exe --selftest
 
       - name: Package (Linux)
         if: matrix.name == 'linux-x86_64'
-        run: mv dist/ytgrab "${{ matrix.artifact }}"
+        run: mv dist/DLPizer "${{ matrix.artifact }}"
 
       - name: Package (Windows)
         if: runner.os == 'Windows'
-        run: mv dist/ytgrab.exe "${{ matrix.artifact }}"
+        run: mv dist/DLPizer.exe "${{ matrix.artifact }}"
 
       - name: Ad-hoc sign the app (macOS)
         if: runner.os == 'macOS'
         run: |
-          codesign --force --deep --sign - dist/ytgrab.app \
-            && codesign --verify --verbose=1 dist/ytgrab.app \
+          codesign --force --deep --sign - dist/DLPizer.app \
+            && codesign --verify --verbose=1 dist/DLPizer.app \
             || echo "ad-hoc signing failed; the app still runs, just slower to start"
 
       - name: Smoke test the .app bundle (macOS)
@@ -221,7 +221,7 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
         run: |
-          BIN=dist/ytgrab.app/Contents/MacOS/ytgrab
+          BIN=dist/DLPizer.app/Contents/MacOS/DLPizer
           [ -f "$BIN" ] || { echo "no .app bundle was produced"; exit 1; }
           "$BIN" --selftest
 
@@ -231,14 +231,14 @@ jobs:
         if: runner.os == 'macOS'
         env:
           QT_QPA_PLATFORM: offscreen
-        run: env PATH=/nonexistent dist/ytgrab.app/Contents/MacOS/ytgrab --selftest
+        run: env PATH=/nonexistent dist/DLPizer.app/Contents/MacOS/DLPizer --selftest
 
       - name: Report the minimum macOS the bundle requires
         if: runner.os == 'macOS'
         run: |
-          BIN=dist/ytgrab.app/Contents/MacOS/ytgrab
+          BIN=dist/DLPizer.app/Contents/MacOS/DLPizer
           otool -l "$BIN" | awk '/LC_BUILD_VERSION/{f=1} f&&/minos/{print "  binary minos:",$2; f=0}'
-          PLIST=dist/ytgrab.app/Contents/Info.plist
+          PLIST=dist/DLPizer.app/Contents/Info.plist
           echo -n "  Info.plist claims: "
           /usr/libexec/PlistBuddy -c "Print :LSMinimumSystemVersion" "$PLIST"
 
@@ -257,17 +257,17 @@ jobs:
               *"$WANT"*) ;;
               *) echo "  wrong arch ($ARCHS): $f"; BAD=$((BAD+1)) ;;
             esac
-          done < <(find dist/ytgrab.app -type f)
+          done < <(find dist/DLPizer.app -type f)
           echo "  checked $N Mach-O files against $WANT, $BAD mismatched"
           [ "$BAD" -eq 0 ]
 
       - name: Package (macOS)
         if: runner.os == 'macOS'
         run: |
-          if [ -d dist/ytgrab.app ]; then
-            ditto -c -k --keepParent dist/ytgrab.app "${{ matrix.artifact }}"
+          if [ -d dist/DLPizer.app ]; then
+            ditto -c -k --keepParent dist/DLPizer.app "${{ matrix.artifact }}"
           else
-            ditto -c -k dist/ytgrab "${{ matrix.artifact }}"
+            ditto -c -k dist/DLPizer "${{ matrix.artifact }}"
           fi
 
       - uses: actions/upload-artifact@v4
@@ -376,7 +376,7 @@ jobs:
           mkdir apk
           APKSIGNER=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)apksigner
           for flavor in arm64 arm32 universal; do
-            out="apk/ytgrab-android-$flavor.apk"
+            out="apk/DLPizer-android-$flavor.apk"
             cp "android/app/build/outputs/apk/$flavor/release/app-$flavor-release.apk" "$out"
             "$APKSIGNER" verify "$out"
             unzip -l "$out" | grep -q "lib/.*/libffmpeg.so" || { echo "$out has no ffmpeg"; exit 1; }
@@ -386,7 +386,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: ytgrab-android
+          name: DLPizer-android
           path: apk/*.apk
           if-no-files-found: error
 
@@ -408,13 +408,13 @@ jobs:
           files: artifacts/*
           generate_release_notes: true
           body: |
-            Desktop builds of ytgrab.
+            Desktop builds of DLPizer (formerly ytgrab).
 
             macOS and Windows are unsigned, so the OS will warn on first launch:
             on macOS right-click the app and choose Open; on Windows choose
             "More info" then "Run anyway".
 
-            Android 7.0+: most phones want ytgrab-android-arm64.apk, older
-            32-bit phones ytgrab-android-arm32.apk; ytgrab-android-universal.apk
+            Android 7.0+: most phones want DLPizer-android-arm64.apk, older
+            32-bit phones DLPizer-android-arm32.apk; DLPizer-android-universal.apk
             runs on all of them. Open it on the phone and allow installing apps
             when asked.

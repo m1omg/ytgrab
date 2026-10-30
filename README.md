@@ -1,4 +1,4 @@
-# ytgrab
+# DLPizer
 
 A small cross-platform app for downloading YouTube video and audio, built on
 [yt-dlp](https://github.com/yt-dlp/yt-dlp) and ffmpeg.
@@ -6,6 +6,13 @@ A small cross-platform app for downloading YouTube video and audio, built on
 Runs on Linux, Windows, macOS and Android (7.0 and newer). ffmpeg and QuickJS
 (the JavaScript runtime yt-dlp needs for YouTube) are bundled, so there is
 nothing else to install.
+
+DLPizer was called **ytgrab** until version 1.6.0. Your settings carry over; on
+Android finished files now go to **Download/DLPizer** (the old ones stay in
+Download/ytgrab), and on Linux `install-linux.sh` replaces the old menu entry.
+Versions 1.5.0 and 1.5.1 look for the release files under the old name, so they
+offer the download page instead of updating themselves - download 1.6.0 once and
+updates are automatic again.
 
 *Toto si prečítajte po [slovensky](README.sk.md).*
 
@@ -15,15 +22,15 @@ Grab a build from the [Releases](../../releases) page:
 
 | Platform | File |
 | --- | --- |
-| Linux | `ytgrab-linux-x86_64` |
-| Windows | `ytgrab-windows-x86_64.exe` |
-| macOS (Apple Silicon) | `ytgrab-macos-arm64.zip` |
-| macOS (Intel) | `ytgrab-macos-x86_64.zip` |
-| Android (most phones) | `ytgrab-android-arm64.apk` |
-| Android (older 32-bit phones) | `ytgrab-android-arm32.apk` |
-| Android (not sure, Chromebooks) | `ytgrab-android-universal.apk` |
+| Linux | `DLPizer-linux-x86_64` |
+| Windows | `DLPizer-windows-x86_64.exe` |
+| macOS (Apple Silicon) | `DLPizer-macos-arm64.zip` |
+| macOS (Intel) | `DLPizer-macos-x86_64.zip` |
+| Android (most phones) | `DLPizer-android-arm64.apk` |
+| Android (older 32-bit phones) | `DLPizer-android-arm32.apk` |
+| Android (not sure, Chromebooks) | `DLPizer-android-universal.apk` |
 
-On Linux, mark it executable first: `chmod +x ytgrab-linux-x86_64`. It needs
+On Linux, mark it executable first: `chmod +x DLPizer-linux-x86_64`. It needs
 glibc 2.39 or newer: Ubuntu 24.04, Debian 13, LMDE 7, Fedora 40, Linux Mint 22
 or later, or a rolling distro such as Arch, CachyOS or openSUSE Tumbleweed
 (`ldd --version` shows yours).
@@ -52,7 +59,7 @@ download, it offers the release page instead.
 
 On Android a card at the top offers the update; the APK for your phone is
 downloaded and checked the same way, and Android asks before installing it
-(the first time it also asks you to let ytgrab install apps).
+(the first time it also asks you to let DLPizer install apps).
 
 ## Remembered settings
 
@@ -125,7 +132,7 @@ part it is: `… (16m15s-16m45s).mp3`. Audio and MP4 video start exactly where y
 asked. MKV can only start video on a keyframe, so an MKV part may begin a moment
 (usually a second or two) early.
 
-If ffmpeg can't fetch the part by itself - some servers refuse it - ytgrab
+If ffmpeg can't fetch the part by itself - some servers refuse it - DLPizer
 downloads the whole video and cuts the part out, so it still works, just slower.
 
 ## Several at once
@@ -155,12 +162,12 @@ for several links and whole playlists.
 ## "Confirm you're not a bot"
 
 YouTube sometimes stops a connection it doesn't trust and asks it to sign in.
-There is no captcha to solve: ytgrab answers by quietly retrying through other
+There is no captcha to solve: DLPizer answers by quietly retrying through other
 YouTube clients, which usually get through, and only shows an error when those
 are stopped too.
 
 If that keeps happening on a computer, sign in to YouTube in your browser and
-pick that browser under **Options → Use YouTube login from browser**. ytgrab then reads
+pick that browser under **Options → Use YouTube login from browser**. DLPizer then reads
 your YouTube cookies from it on this computer and sends them only to YouTube.
 YouTube can temporarily restrict an account that downloads a lot, so a secondary
 account is the safer choice. On Windows, Chrome-family browsers usually can't be
@@ -187,14 +194,14 @@ misbehaves.
 The Android app does what the desktop one does - the same modes, options and
 download engine - with a phone-shaped screen:
 
-* **Share** a video from the YouTube app (or a browser) and pick ytgrab; the
+* **Share** a video from the YouTube app (or a browser) and pick DLPizer; the
   link is filled in and read straight away.
 * Downloads keep running in the background, one after another, with progress,
   how many are waiting and *Cancel* / *Cancel all* in the notification.
-* Finished files land in **Download/ytgrab**, ready for any player, file
+* Finished files land in **Download/DLPizer**, ready for any player, file
   manager or the *Share* button.
 * It follows the phone's language (English or Slovak), and on Android 13+ the
-  language can be set for ytgrab alone in system settings.
+  language can be set for DLPizer alone in system settings.
 
 Reading the first video after the app starts takes a few seconds longer than
 on a computer: the phone solves YouTube's JavaScript challenge itself, and
@@ -204,7 +211,7 @@ older phones are slower at it.
 
 `packaging/install-linux.sh` copies the built binary to `~/.local/bin`, renders
 the icon at the sizes an icon theme expects, and writes a `.desktop` file so
-ytgrab shows up in the applications menu. Everything stays under `~/.local`, so
+DLPizer shows up in the applications menu. Everything stays under `~/.local`, so
 no root access is needed.
 
 ```bash

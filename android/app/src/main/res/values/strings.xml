@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name" translatable="false">ytgrab</string>
+    <string name="app_name" translatable="false">DLPizer</string>
 
     <!-- link row -->
     <string name="link">Video link</string>
@@ -74,7 +74,7 @@
     <string name="cancelled">Cancelled</string>
     <string name="download_failed">Download failed</string>
     <string name="no_app">No app on this device can open this file.</string>
-    <string name="storage_permission">ytgrab needs permission to save into your Downloads folder.</string>
+    <string name="storage_permission">DLPizer needs permission to save into your Downloads folder.</string>
 
     <!-- notifications -->
     <string name="channel_downloads">Downloads</string>
@@ -143,8 +143,8 @@
     <string name="transcript_translated">%1$s - automatic translation</string>
     <string name="summary_original">%1$s, original</string>
     <string name="summary_original_any">original language</string>
-    <string name="update_available">ytgrab %1$s is available - you have %2$s.</string>
-    <string name="update_install_note">Android asks you to confirm the update, and the first time also to allow ytgrab to install apps.</string>
+    <string name="update_available">DLPizer %1$s is available - you have %2$s.</string>
+    <string name="update_install_note">Android asks you to confirm the update, and the first time also to allow DLPizer to install apps.</string>
     <string name="update_downloading">Downloading the update… %1$d%%</string>
     <string name="update_failed">The update couldn\'t be downloaded: %1$s</string>
     <string name="update_incomplete">the download was cut short</string>

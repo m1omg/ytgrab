@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render ytgrab's icon to PNG files for the desktop.
+"""Render DLPizer's icon to PNG files for the desktop.
 
 The app draws its window icon in code; this renders the same artwork at the
 sizes a Linux icon theme expects, so the menu entry doesn't fall back to a
@@ -46,7 +46,7 @@ def main():
     for size in SIZES:
         out_dir = out_root / f"{size}x{size}" / "apps"
         out_dir.mkdir(parents=True, exist_ok=True)
-        target = out_dir / "ytgrab.png"
+        target = out_dir / "dlpizer.png"
         if not render(size).save(str(target)):
             raise SystemExit(f"failed to write {target}")
         written.append(target)

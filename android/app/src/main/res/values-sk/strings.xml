@@ -72,7 +72,7 @@
     <string name="cancelled">Zrušené</string>
     <string name="download_failed">Sťahovanie zlyhalo</string>
     <string name="no_app">V tomto zariadení nie je aplikácia, ktorá by tento súbor otvorila.</string>
-    <string name="storage_permission">ytgrab potrebuje povolenie ukladať do priečinka Stiahnuté.</string>
+    <string name="storage_permission">DLPizer potrebuje povolenie ukladať do priečinka Stiahnuté.</string>
 
     <!-- notifications -->
     <string name="channel_downloads">Sťahovanie</string>
@@ -157,8 +157,8 @@
     <string name="transcript_translated">%1$s – automatický preklad</string>
     <string name="summary_original">%1$s, pôvodné</string>
     <string name="summary_original_any">pôvodný jazyk</string>
-    <string name="update_available">K dispozícii je ytgrab %1$s – vy máte %2$s.</string>
-    <string name="update_install_note">Android sa spýta, či aktualizáciu nainštalovať, a prvýkrát aj či ytgrabu dovolíte inštalovať aplikácie.</string>
+    <string name="update_available">K dispozícii je DLPizer %1$s – vy máte %2$s.</string>
+    <string name="update_install_note">Android sa spýta, či aktualizáciu nainštalovať, a prvýkrát aj či aplikácii DLPizer dovolíte inštalovať aplikácie.</string>
     <string name="update_downloading">Sťahuje sa aktualizácia… %1$d %%</string>
     <string name="update_failed">Aktualizáciu sa nepodarilo stiahnuť: %1$s</string>
     <string name="update_incomplete">sťahovanie sa prerušilo</string>

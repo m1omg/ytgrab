@@ -227,5 +227,5 @@ def api_file(job_id):
 if __name__ == "__main__":
     threading.Thread(target=sweep_old_jobs, daemon=True).start()
     port = int(os.environ.get("PORT", "5000"))
-    print(f"\n  ytgrab (browser version) running at http://127.0.0.1:{port}\n")
+    print(f"\n  DLPizer (browser version) running at http://127.0.0.1:{port}\n")
     app.run(host="127.0.0.1", port=port, threaded=True)

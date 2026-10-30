@@ -1,4 +1,4 @@
-# ytgrab
+# DLPizer
 
 Malá multiplatformová aplikácia na sťahovanie videa a zvuku z YouTube,
 postavená na [yt-dlp](https://github.com/yt-dlp/yt-dlp) a ffmpeg.
@@ -6,6 +6,13 @@ postavená na [yt-dlp](https://github.com/yt-dlp/yt-dlp) a ffmpeg.
 Beží na Linuxe, Windowse, macOS aj Androide (7.0 a novšom). ffmpeg aj QuickJS
 (behové prostredie JavaScriptu, ktoré yt-dlp potrebuje pre YouTube) sú
 súčasťou balíka, takže nič ďalšie netreba inštalovať.
+
+Do verzie 1.6.0 sa DLPizer volal **ytgrab**. Nastavenia sa prenesú; na Androide
+sa hotové súbory odteraz ukladajú do **Download/DLPizer** (staré zostávajú
+v Download/ytgrab) a na Linuxe `install-linux.sh` nahradí starú položku v ponuke.
+Verzie 1.5.0 a 1.5.1 hľadajú súbory vydania pod starým názvom, preto namiesto
+samočinnej aktualizácie ponúknu stránku na stiahnutie – stačí raz stiahnuť 1.6.0
+a ďalšie aktualizácie sú opäť automatické.
 
 *Read this in [English](README.md).*
 
@@ -15,15 +22,15 @@ Zostavenú aplikáciu nájdete na stránke [Releases](../../releases):
 
 | Systém | Súbor |
 | --- | --- |
-| Linux | `ytgrab-linux-x86_64` |
-| Windows | `ytgrab-windows-x86_64.exe` |
-| macOS (Apple Silicon) | `ytgrab-macos-arm64.zip` |
-| macOS (Intel) | `ytgrab-macos-x86_64.zip` |
-| Android (väčšina telefónov) | `ytgrab-android-arm64.apk` |
-| Android (staršie 32-bitové telefóny) | `ytgrab-android-arm32.apk` |
-| Android (neviete, Chromebooky) | `ytgrab-android-universal.apk` |
+| Linux | `DLPizer-linux-x86_64` |
+| Windows | `DLPizer-windows-x86_64.exe` |
+| macOS (Apple Silicon) | `DLPizer-macos-arm64.zip` |
+| macOS (Intel) | `DLPizer-macos-x86_64.zip` |
+| Android (väčšina telefónov) | `DLPizer-android-arm64.apk` |
+| Android (staršie 32-bitové telefóny) | `DLPizer-android-arm32.apk` |
+| Android (neviete, Chromebooky) | `DLPizer-android-universal.apk` |
 
-Na Linuxe súbor najprv označte ako spustiteľný: `chmod +x ytgrab-linux-x86_64`.
+Na Linuxe súbor najprv označte ako spustiteľný: `chmod +x DLPizer-linux-x86_64`.
 Potrebuje glibc 2.39 alebo novšiu: Ubuntu 24.04, Debian 13, LMDE 7, Fedora 40,
 Linux Mint 22 a novšie, alebo priebežne aktualizovanú distribúciu ako Arch,
 CachyOS či openSUSE Tumbleweed (vašu verziu ukáže `ldd --version`).
@@ -54,7 +61,7 @@ stiahnutého súboru, ponúkne namiesto toho stránku s vydaním.
 
 Na Androide aktualizáciu ponúkne karta navrchu; APK pre váš telefón sa stiahne
 a overí rovnako a Android sa pred inštaláciou spýta (prvýkrát aj na to, či
-ytgrabu dovolíte inštalovať aplikácie).
+aplikácii DLPizer dovolíte inštalovať aplikácie).
 
 ## Zapamätané nastavenia
 
@@ -131,7 +138,7 @@ je: `… (16m15s-16m45s).mp3`. Zvuk a video v MP4 začnú presne tam, kde ste
 chceli. MKV vie začať video len na kľúčovom snímku, takže časť v MKV môže začať
 o chvíľu (zvyčajne o sekundu-dve) skôr.
 
-Ak ffmpeg nedokáže časť stiahnuť sám – niektoré servery to odmietnu – ytgrab
+Ak ffmpeg nedokáže časť stiahnuť sám – niektoré servery to odmietnu – DLPizer
 stiahne celé video a časť z neho vystrihne, takže to funguje aj tak, len
 pomalšie.
 
@@ -162,13 +169,13 @@ je pri viacerých odkazoch a celých playlistoch vypnutá.
 ## „Potvrďte, že nie ste robot“
 
 YouTube niekedy zastaví pripojenie, ktorému nedôveruje, a žiada prihlásenie.
-Nie je to captcha, ktorú by sa dalo vyriešiť: ytgrab to v tichosti skúsi znova
+Nie je to captcha, ktorú by sa dalo vyriešiť: DLPizer to v tichosti skúsi znova
 cez iných klientov YouTube, ktorí väčšinou prejdú, a chybu ukáže, až keď
 zastaví aj tých.
 
 Ak sa to na počítači opakuje, prihláste sa do YouTube v prehliadači a vyberte
 ho v ponuke
-**Možnosti → Použiť prihlásenie do YouTube z prehliadača**. ytgrab potom z neho
+**Možnosti → Použiť prihlásenie do YouTube z prehliadača**. DLPizer potom z neho
 v tomto počítači načíta vaše cookies pre YouTube a pošle ich výhradne službe
 YouTube. YouTube môže dočasne obmedziť účet, ktorý veľa sťahuje, preto je
 bezpečnejší vedľajší účet. Vo Windowse sa z prehliadačov rodiny Chrome cookies
@@ -196,13 +203,13 @@ Aplikácia pre Android robí to isté ako tá pre počítač – rovnaké režim
 možnosti aj sťahovací engine – len s obrazovkou prispôsobenou telefónu:
 
 * V aplikácii YouTube (alebo v prehliadači) video **zdieľajte** a vyberte
-  ytgrab; odkaz sa vyplní a hneď načíta.
+  DLPizer; odkaz sa vyplní a hneď načíta.
 * Sťahovanie beží ďalej aj na pozadí, jedno po druhom, s priebehom, počtom
   čakajúcich a tlačidlami *Zrušiť* / *Zrušiť všetko* v upozornení.
-* Hotové súbory sa uložia do priečinka **Download/ytgrab**, odkiaľ ich otvorí
+* Hotové súbory sa uložia do priečinka **Download/DLPizer**, odkiaľ ich otvorí
   ktorýkoľvek prehrávač, správca súborov či tlačidlo *Zdieľať*.
 * Riadi sa jazykom telefónu (angličtina alebo slovenčina) a na Androide 13+
-  sa dá jazyk pre ytgrab nastaviť samostatne v nastaveniach systému.
+  sa dá jazyk pre DLPizer nastaviť samostatne v nastaveniach systému.
 
 Načítanie prvého videa po spustení aplikácie trvá o pár sekúnd dlhšie než na
 počítači: telefón rieši JavaScriptovú úlohu YouTube sám a staršie telefóny sú
@@ -212,7 +219,7 @@ pri tom pomalšie.
 
 `packaging/install-linux.sh` skopíruje zostavený súbor do `~/.local/bin`,
 vykreslí ikonu vo veľkostiach, aké očakáva téma ikon, a zapíše súbor `.desktop`,
-takže sa ytgrab objaví v ponuke aplikácií. Všetko zostáva pod `~/.local`, takže
+takže sa DLPizer objaví v ponuke aplikácií. Všetko zostáva pod `~/.local`, takže
 nie sú potrebné práva správcu.
 
 ```bash

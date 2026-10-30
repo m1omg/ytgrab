@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Entry point for the ytgrab desktop app."""
+"""Entry point for the DLPizer desktop app."""
 
 import sys
 
@@ -11,7 +11,7 @@ def selftest():
     import yt_dlp
     from PySide6 import QtCore
 
-    print(f"ytgrab   {__version__}")
+    print(f"DLPizer  {__version__}")
     print(f"python   {sys.version.split()[0]}")
     print(f"yt-dlp   {yt_dlp.version.__version__}")
     print(f"Qt       {QtCore.__version__}")
