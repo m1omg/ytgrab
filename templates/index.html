@@ -253,6 +253,17 @@ let links = [];      // the links in the box, when there are several
 let poll = null;
 let busy = false;    // whether the queue has anything running or waiting
 
+// Choices are remembered in this browser, as the desktop app remembers them.
+const saved = (() => {
+  try { return JSON.parse(localStorage.getItem("ytgrab") || "{}") || {}; } catch (e) { return {}; }
+})();
+function remember(key, value) {
+  saved[key] = value;
+  try { localStorage.setItem("ytgrab", JSON.stringify(saved)); } catch (e) { /* private window */ }
+}
+// The resolution is a ceiling: a video without it gets the highest one under it.
+let height = /^\d+$/.test(saved.res || "") ? saved.res : "best";
+
 function fill(template, fields) {
   return template.replace(/\{(\w+)\}/g, (_, key) => fields[key]);
 }
@@ -303,7 +314,18 @@ function fillSelect(sel, items, keep) {
   if (previous !== null && items.some(([v]) => String(v) === previous)) sel.value = previous;
 }
 function fillHeights(heights) {
-  fillSelect($("res"), [["best", T.best_available]].concat(heights.map(h => [h, h + "p"])), true);
+  fillSelect($("res"), [["best", T.best_available]].concat(heights.map(h => [h, h + "p"])));
+  const fitting = height === "best" ? [] : heights.filter(h => h <= Number(height));
+  $("res").value = fitting.length ? String(Math.max(...fitting)) : "best";
+}
+// The same wording as transcript_label() in ytgrab/core.py.
+function transcriptLabel(s) {
+  if (s.code === "orig") return T.transcript_original_any;
+  const fields = { code: s.code.replace(/-orig$/, "") };
+  if (s.kind === "manual") return fill(T.transcript_manual, fields);
+  if (s.kind === "original") return fill(T.transcript_original, fields);
+  if (s.kind === "translated") return fill(T.transcript_translated, fields);
+  return s.auto ? fill(T.transcript_auto, fields) : s.code;
 }
 function fillTranscripts(tracks) {
   const tl = $("tlang");
@@ -311,8 +333,9 @@ function fillTranscripts(tracks) {
     fillSelect(tl, [["", T.transcript_none]]);
     return;
   }
-  fillSelect(tl, tracks.map(s => [s.code, s.auto ? fill(T.transcript_auto, { code: s.code }) : s.code]));
-  // Prefer the page language, then English, then whatever came first.
+  fillSelect(tl, tracks.map(s => [s.code, transcriptLabel(s)]));
+  // Prefer the page language, then English, then whatever came first. The
+  // list comes best first, so "en-orig" wins over a translated "en".
   const want = [LANG, "en"].find(l => [...tl.options].some(o => o.value.split("-")[0] === l));
   if (want) tl.value = [...tl.options].find(o => o.value.split("-")[0] === want).value;
 }
@@ -349,6 +372,7 @@ document.querySelectorAll(".mode").forEach(el => {
     document.querySelectorAll(".mode").forEach(m => m.classList.remove("active"));
     el.classList.add("active");
     mode = el.dataset.mode;
+    remember("mode", mode);
     $("videoOpts").classList.toggle("hidden", mode !== "video");
     $("audioOpts").classList.toggle("hidden", mode !== "audio");
     $("mp3Opts").classList.toggle("hidden", mode !== "mp3");
@@ -358,6 +382,19 @@ document.querySelectorAll(".mode").forEach(el => {
     $("partRow").classList.toggle("hidden", mode === "transcript");
   };
 });
+
+$("res").onchange = () => { height = $("res").value; remember("res", height); };
+for (const id of ["container", "acodec", "bitrate", "tfmt"]) {
+  const sel = $(id);
+  if ([...sel.options].some(o => o.value === saved[id])) sel.value = saved[id];
+  sel.onchange = () => remember(id, sel.value);
+}
+if (typeof saved.embed === "boolean") $("embed").checked = saved.embed;
+$("embed").onchange = () => remember("embed", $("embed").checked);
+if (["video", "audio", "mp3", "transcript"].includes(saved.mode)) {
+  document.querySelector(`.mode[data-mode="${saved.mode}"]`).onclick();
+}
+fillHeights(HEIGHTS);
 
 $("part").onchange = syncPart;
 $("scopeThis").onchange = $("scopeWhole").onchange = () => { syncPart(); syncButton(); };
@@ -378,7 +415,9 @@ $("url").addEventListener("input", () => {
     $("choice").classList.add("hidden");
     $("info").classList.remove("hidden");
     fillHeights(HEIGHTS);
-    fillTranscripts([...new Set([LANG, "en"])].map(code => ({ code, auto: false })));
+    // Each video's own language, or one YouTube translates into.
+    fillTranscripts([{ code: "orig", auto: true, kind: "original" }]
+      .concat([...new Set([LANG, "en"])].map(code => ({ code, auto: false }))));
     $("opts").classList.remove("hidden");
   } else {
     $("info").classList.add("hidden");

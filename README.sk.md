@@ -39,6 +39,31 @@ certifikáty stoja peniaze. Systém vás pri prvom spustení upozorní: na macOS
 kliknite na aplikáciu pravým tlačidlom a vyberte *Otvoriť*, na Windowse kliknite
 na *Ďalšie informácie* a potom na *Spustiť napriek tomu*.
 
+## Aktualizácie
+
+Aplikácia pár sekúnd po spustení zistí, či nevyšla novšia verzia. Ak áno,
+povie, čo je nové, a ponúkne *Aktualizovať a reštartovať*: novú verziu stiahne,
+overí podľa kontrolného súčtu SHA-256 z vydania, nahradí ňou starú a znova sa
+spustí, s nastaveniami tak, ako boli. *Teraz nie* sa spýta nabudúce. Kým
+prebieha sťahovanie, počká, kým sa dokončí.
+
+*Možnosti → Hľadať aktualizácie teraz* sa pozrie hneď a *Automaticky hľadať
+aktualizácie* kontrolu pri spustení vypne. Ak sa aplikácia nemôže sama nahradiť,
+napríklad v priečinku, kam nemôže zapisovať, alebo na Macu spustená priamo zo
+stiahnutého súboru, ponúkne namiesto toho stránku s vydaním.
+
+Na Androide aktualizáciu ponúkne karta navrchu; APK pre váš telefón sa stiahne
+a overí rovnako a Android sa pred inštaláciou spýta (prvýkrát aj na to, či
+ytgrabu dovolíte inštalovať aplikácie).
+
+## Zapamätané nastavenia
+
+Čo sťahujete (video, zvuk, MP3 alebo prepis), rozlíšenie, kontajner, zvuková
+stopa, dátový tok MP3, formát prepisu a vkladanie obalu sa zapamätajú do
+ďalšieho spustenia – v aplikácii pre počítač, na Androide aj vo verzii pre
+prehliadač – a v aplikácii pre počítač aj priečinok na sťahovanie. Rozlíšenie funguje ako strop: pri zvolenom 1080p sa video,
+ktoré má najviac 720p, stiahne v 720p a ďalšie opäť v 1080p.
+
 ## Jazyk
 
 Aplikácia sa riadi jazykom systému: na slovenskom systéme sa spustí po
@@ -74,8 +99,17 @@ Oba zvukové režimy vedia do súboru vložiť náhľadový obrázok ako obal a 
 názov a ďalšie údaje.
 
 **Prepis** — namiesto videa uloží stopu s titulkami. Nesťahuje sa nič okrem
-titulkov, takže je hotový za pár sekúnd. Najskôr sa ponúkajú ručne vytvorené
-titulky, tie automatické od YouTubu sú označené ako *(automatické)*.
+titulkov, takže je hotový za pár sekúnd. V zozname sú:
+
+* titulky *napísané ľuďmi*, ak ich video má;
+* *pôvodné* – automatické titulky YouTubu v jazyku, ktorým sa vo videu hovorí;
+* *automatický preklad* YouTubu do slovenčiny alebo angličtiny.
+
+Aplikácia vyberie svoj jazyk, ak sa dá, potom angličtinu, a pôvodné titulky
+uprednostní pred prekladom – anglické video teda dostane pôvodné anglické
+titulky (`en-orig`) a v slovenčine je vybraný slovenský preklad, pôvodné titulky
+sú o riadok vyššie. Pri viacerých videách naraz je tu aj *Pôvodný jazyk
+každého videa*.
 
 * *Čistý text* prevedie titulky na súvislý prepis. Časovanie sa vynechá a
   opakované riadky, ktoré vznikajú pri rolovaní automatických titulkov, sa

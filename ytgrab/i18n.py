@@ -97,6 +97,10 @@ STRINGS = {
         "transcript_srt": "SRT - timed subtitles",
         "transcript_vtt": "WebVTT - timed subtitles",
         "transcript_auto": "{code} (automatic)",
+        "transcript_manual": "{code} - written by people",
+        "transcript_original": "{code} - original, automatic",
+        "transcript_original_any": "Each video's own language (automatic)",
+        "transcript_translated": "{code} - automatic translation",
         "transcript_none": "This video has no transcript.",
 
         # -- destination --
@@ -141,9 +145,42 @@ STRINGS = {
         "summary_best": "best quality",
         "summary_up_to": "up to {height}p",
         "summary_kbps": "{kbps} kbps",
+        "summary_original": "{code}, original",
+        "summary_original_any": "original language",
+
+        # -- updates --
+        "menu_updates_auto": "Check for updates automatically",
+        "menu_updates_now": "Check for updates now…",
+        "update_checking": "Checking for updates…",
+        "update_title": "Update available",
+        "update_none_title": "No update",
+        "update_latest": "You have the newest version, ytgrab {version}.",
+        "update_available": "ytgrab {new} is available - you have {current}.",
+        "update_changes": "What's new:",
+        "update_ask": ("Update now? ytgrab downloads it ({size}), replaces itself and starts "
+                       "again. Your settings stay as they are."),
+        "update_ask_plain": ("Update now? ytgrab downloads it, replaces itself and starts "
+                             "again. Your settings stay as they are."),
+        "update_ask_page": "Open the page to download it?",
+        "update_now": "Update and restart",
+        "update_later": "Not now",
+        "update_open_page": "Open download page",
+        "update_downloading": "Downloading ytgrab {version}…",
+        "update_after_downloads": "ytgrab {version} is out - you'll be asked once the downloads finish.",
+        "update_restart_failed": "ytgrab {version} is installed. Start it again to use it.",
+        "update_check_failed_title": "Couldn't check for updates",
+        "update_check_failed": "GitHub couldn't be reached: {error}",
+        "update_failed_title": "Update failed",
+        "update_failed": ("ytgrab couldn't update itself: {error}\n\n"
+                          "You can download the new version from the release page instead."),
+        "update_incomplete": "the download was cut short",
+        "update_corrupt": "the downloaded file is damaged",
+        "update_bad_reply": "GitHub sent an answer ytgrab doesn't understand",
+        "update_cant_write": "it can't write to {folder} ({reason})",
 
         # -- status bar --
         "ffmpeg_at": "ffmpeg: {path}",
+        "ffmpeg_bundled": "ffmpeg: built in",
         "ffmpeg_status_missing": "ffmpeg not found - conversion will fail",
         "invalid_link": "Enter a valid http(s) link.",
         "reading_details": "Reading video details…",
@@ -313,6 +350,10 @@ STRINGS = {
         "transcript_srt": "SRT – titulky s časovaním",
         "transcript_vtt": "WebVTT – titulky s časovaním",
         "transcript_auto": "{code} (automatické)",
+        "transcript_manual": "{code} – napísané ľuďmi",
+        "transcript_original": "{code} – pôvodné, automatické",
+        "transcript_original_any": "Pôvodný jazyk každého videa (automatické)",
+        "transcript_translated": "{code} – automatický preklad",
         "transcript_none": "Toto video nemá prepis.",
 
         # -- destination --
@@ -361,9 +402,42 @@ STRINGS = {
         "summary_best": "najlepšia kvalita",
         "summary_up_to": "do {height}p",
         "summary_kbps": "{kbps} kb/s",
+        "summary_original": "{code}, pôvodné",
+        "summary_original_any": "pôvodný jazyk",
+
+        # -- aktualizácie --
+        "menu_updates_auto": "Automaticky hľadať aktualizácie",
+        "menu_updates_now": "Hľadať aktualizácie teraz…",
+        "update_checking": "Hľadajú sa aktualizácie…",
+        "update_title": "K dispozícii je aktualizácia",
+        "update_none_title": "Žiadna aktualizácia",
+        "update_latest": "Máte najnovšiu verziu, ytgrab {version}.",
+        "update_available": "K dispozícii je ytgrab {new} – vy máte {current}.",
+        "update_changes": "Čo je nové:",
+        "update_ask": ("Aktualizovať teraz? ytgrab novú verziu stiahne ({size}), nahradí sa ňou "
+                       "a znova sa spustí. Nastavenia zostanú tak, ako sú."),
+        "update_ask_plain": ("Aktualizovať teraz? ytgrab novú verziu stiahne, nahradí sa ňou "
+                             "a znova sa spustí. Nastavenia zostanú tak, ako sú."),
+        "update_ask_page": "Otvoriť stránku, kde si ju stiahnete?",
+        "update_now": "Aktualizovať a reštartovať",
+        "update_later": "Teraz nie",
+        "update_open_page": "Otvoriť stránku na stiahnutie",
+        "update_downloading": "Sťahuje sa ytgrab {version}…",
+        "update_after_downloads": "Vyšiel ytgrab {version} – ponúkne sa po dokončení sťahovania.",
+        "update_restart_failed": "ytgrab {version} je nainštalovaný. Spustite ho znova.",
+        "update_check_failed_title": "Aktualizácie sa nepodarilo zistiť",
+        "update_check_failed": "GitHub sa nepodarilo kontaktovať: {error}",
+        "update_failed_title": "Aktualizácia zlyhala",
+        "update_failed": ("ytgrab sa nepodarilo aktualizovať: {error}\n\n"
+                          "Novú verziu si môžete stiahnuť zo stránky s vydaniami."),
+        "update_incomplete": "sťahovanie sa prerušilo",
+        "update_corrupt": "stiahnutý súbor je poškodený",
+        "update_bad_reply": "GitHub poslal odpoveď, ktorej ytgrab nerozumie",
+        "update_cant_write": "nemôže zapisovať do {folder} ({reason})",
 
         # -- status bar --
         "ffmpeg_at": "ffmpeg: {path}",
+        "ffmpeg_bundled": "ffmpeg: zabudovaný",
         "ffmpeg_status_missing": "ffmpeg sa nenašiel – konverzia zlyhá",
         "invalid_link": "Zadajte platný odkaz http(s).",
         "reading_details": "Načítavajú sa údaje o videu…",

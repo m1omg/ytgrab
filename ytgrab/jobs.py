@@ -41,7 +41,13 @@ def summary(job, lang=None):
     elif job.mode == "mp3":
         bits = ["MP3", "V0" if str(job.quality) == "0" else t("summary_kbps", lang, kbps=job.quality)]
     else:
-        bits = [t("mode_transcript", lang), job.quality, job.container.upper()]
+        if job.quality == core.ORIGINAL:
+            language = t("summary_original_any", lang)
+        elif str(job.quality).endswith("-orig"):
+            language = t("summary_original", lang, code=job.quality.removesuffix("-orig"))
+        else:
+            language = job.quality
+        bits = [t("mode_transcript", lang), language, job.container.upper()]
     if job.section:
         start, end = job.section
         bits.append(f"{core.format_time(start)}–{core.format_time(end) if end is not None else ''}")

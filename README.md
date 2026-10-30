@@ -37,6 +37,32 @@ The macOS and Windows builds are **unsigned**, because signing certificates
 cost money. The OS will warn you on first launch: on macOS right-click the app
 and choose *Open*, on Windows click *More info* then *Run anyway*.
 
+## Updates
+
+The app looks for a newer release a few seconds after it opens. When there is
+one it says what's new and offers *Update and restart*: it downloads the new
+version, checks it against the release's SHA-256, puts it in place of the old
+one and starts again, with your settings as they were. *Not now* asks again
+next time. While downloads are running it waits until they finish.
+
+*Options → Check for updates now* looks straight away, and *Check for updates
+automatically* turns the check at start off. Where the app can't replace
+itself, such as a folder it can't write to or a Mac app run straight from the
+download, it offers the release page instead.
+
+On Android a card at the top offers the update; the APK for your phone is
+downloaded and checked the same way, and Android asks before installing it
+(the first time it also asks you to let ytgrab install apps).
+
+## Remembered settings
+
+What you download (video, audio, MP3 or transcript), the resolution, the
+container, the audio stream, the MP3 bitrate, the transcript format and the
+cover art option are remembered for next time - in the desktop app, on Android
+and in the browser version - and so is the desktop app's download folder. A resolution works as a ceiling:
+with 1080p chosen, a video that only goes to 720p downloads at 720p, and the
+next one at 1080p again.
+
 ## Language
 
 The app follows the system language: it starts in Slovak on a Slovak system and
@@ -68,8 +94,17 @@ a sensible default for compatibility.
 Both audio modes can embed the thumbnail as cover art along with title tags.
 
 **Transcript** — saves the subtitle track instead of the media. Nothing but the
-captions is fetched, so it finishes in a second or two. Manual subtitles are
-listed first; YouTube's machine-generated ones are marked *(automatic)*.
+captions is fetched, so it finishes in a second or two. The list offers:
+
+* subtitles *written by people*, when the video has any;
+* the *original* - YouTube's automatic captions in the language spoken;
+* YouTube's *automatic translation* into Slovak or English.
+
+The app picks its own language if it can, then English, and prefers the
+original to a translation - so an English video gets the original English
+captions (`en-orig`), while in Slovak the Slovak translation is selected, with
+the original one line above it. For several videos at once there's also *Each
+video's own language*.
 
 * *Plain text* flattens the captions into one flowing transcript. Timings are
   dropped, and the repeated lines that scrolling auto-captions produce are

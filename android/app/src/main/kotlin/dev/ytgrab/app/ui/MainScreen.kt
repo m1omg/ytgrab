@@ -66,6 +66,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.ytgrab.app.BuildConfig
 import dev.ytgrab.app.DownloadRequest
 import dev.ytgrab.app.Downloads
 import dev.ytgrab.app.ItemState
@@ -76,6 +77,7 @@ import dev.ytgrab.app.Parts
 import dev.ytgrab.app.QueueItem
 import dev.ytgrab.app.R
 import dev.ytgrab.app.SavedFile
+import dev.ytgrab.app.Transcript
 import dev.ytgrab.app.VideoInfo
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -100,6 +102,7 @@ fun MainScreen(
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            viewModel.update?.let { item { UpdateCard(it.version, viewModel) } }
             item { LinkRow(viewModel, onPaste) }
             viewModel.message?.let {
                 item { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
@@ -156,6 +159,52 @@ private fun LinkRow(viewModel: MainViewModel, onPaste: () -> Unit) {
                     Text(stringResource(R.string.fetching), modifier = Modifier.padding(start = 8.dp))
                 } else {
                     Text(stringResource(R.string.fetch))
+                }
+            }
+        }
+    }
+}
+
+/** A newer ytgrab: download it and let Android install it, or put it off. */
+@Composable
+private fun UpdateCard(version: String, viewModel: MainViewModel) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                stringResource(R.string.update_available, version, BuildConfig.VERSION_NAME),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+            )
+            val progress = viewModel.updateProgress
+            if (progress != null) {
+                LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
+                Text(
+                    stringResource(R.string.update_downloading, (progress * 100).toInt()),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                )
+            } else {
+                Text(
+                    stringResource(R.string.update_install_note),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            viewModel.updateError?.let {
+                Text(
+                    stringResource(R.string.update_failed, it),
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = viewModel::installUpdate,
+                    enabled = progress == null,
+                    modifier = Modifier.heightIn(min = 48.dp),
+                ) { Text(stringResource(R.string.update_now)) }
+                TextButton(onClick = viewModel::dismissUpdate, modifier = Modifier.heightIn(min = 48.dp)) {
+                    Text(stringResource(R.string.update_later))
                 }
             }
         }
@@ -297,7 +346,7 @@ private fun Options(viewModel: MainViewModel) {
                 label = stringResource(R.string.resolution),
                 options = listOf("best" to stringResource(R.string.best_available)) +
                     viewModel.heights.map { it.toString() to "${it}p" },
-                selected = viewModel.height,
+                selected = viewModel.heightShown,
                 onSelect = { viewModel.height = it },
             )
             Choice(
@@ -341,9 +390,7 @@ private fun Options(viewModel: MainViewModel) {
                 tracks.isEmpty() -> Hint(stringResource(R.string.transcript_none))
                 else -> Choice(
                     label = stringResource(R.string.transcript_lang),
-                    options = tracks.map {
-                        it.code to if (it.auto) stringResource(R.string.transcript_auto, it.code) else it.code
-                    },
+                    options = tracks.map { it.code to transcriptLabel(it) },
                     selected = viewModel.transcriptLang.orEmpty(),
                     onSelect = { viewModel.transcriptLang = it },
                 )
@@ -668,10 +715,32 @@ private fun summary(request: DownloadRequest): String {
             "MP3",
             if (request.quality == "0") "V0" else stringResource(R.string.summary_kbps, request.quality),
         )
-        else -> listOf(stringResource(R.string.mode_transcript), request.quality, request.container.uppercase())
+        else -> listOf(
+            stringResource(R.string.mode_transcript),
+            when {
+                request.quality == Transcript.ORIGINAL -> stringResource(R.string.summary_original_any)
+                request.quality.endsWith("-orig") -> stringResource(R.string.summary_original, request.quality.removeSuffix("-orig"))
+                else -> request.quality
+            },
+            request.container.uppercase(),
+        )
     }
     val part = request.part?.let { (start, end) -> "${Parts.format(start)}–${end?.let(Parts::format).orEmpty()}" }
     return (bits + listOfNotNull(part)).joinToString("  ·  ")
+}
+
+/** The same wording as transcript_label() in ytgrab/core.py. */
+@Composable
+private fun transcriptLabel(track: Transcript): String {
+    val code = track.code.removeSuffix("-orig")
+    return when {
+        track.code == Transcript.ORIGINAL -> stringResource(R.string.transcript_original_any)
+        track.kind == "manual" -> stringResource(R.string.transcript_manual, code)
+        track.kind == "original" -> stringResource(R.string.transcript_original, code)
+        track.kind == "translated" -> stringResource(R.string.transcript_translated, code)
+        track.auto -> stringResource(R.string.transcript_auto, code)
+        else -> code
+    }
 }
 
 /** 3725 -> "1:02:05", 65 -> "1:05", like the desktop app. */

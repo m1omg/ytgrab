@@ -1,16 +1,20 @@
 package dev.ytgrab.app
 
 import android.app.Application
+import android.content.Context
 import android.graphics.BitmapFactory
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import androidx.core.content.edit
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -20,7 +24,17 @@ import java.net.URL
 
 enum class Mode(val key: String) { VIDEO("video"), AUDIO("audio"), MP3("mp3"), TRANSCRIPT("transcript") }
 
-data class Transcript(val code: String, val auto: Boolean)
+/**
+ * A transcript track. kind is "manual" (written by people), "original"
+ * (YouTube's automatic one in the language spoken) or "translated"; see
+ * _transcripts() in ytgrab/core.py.
+ */
+data class Transcript(val code: String, val auto: Boolean, val kind: String = "") {
+    companion object {
+        /** Each video's own language, for several videos at once (core.ORIGINAL). */
+        const val ORIGINAL = "orig"
+    }
+}
 
 data class PlaylistEntry(val url: String, val title: String)
 
@@ -58,7 +72,7 @@ data class VideoInfo(
                 isLive = json.optBoolean("is_live"),
                 transcripts = List(tracks.length()) {
                     val t = tracks.getJSONObject(it)
-                    Transcript(t.getString("code"), t.optBoolean("auto"))
+                    Transcript(t.getString("code"), t.optBoolean("auto"), t.optString("kind"))
                 },
                 video = json.optBoolean("video", true),
                 playlist = list?.let {
@@ -90,6 +104,9 @@ object Links {
 }
 
 class MainViewModel(app: Application) : AndroidViewModel(app) {
+    // The choices below are remembered between launches, like the desktop app's.
+    private val prefs = app.getSharedPreferences("choices", Context.MODE_PRIVATE)
+
     var url by mutableStateOf("")
     var fetching by mutableStateOf(false)
         private set
@@ -99,14 +116,25 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var message by mutableStateOf<String?>(null)
 
-    var mode by mutableStateOf(Mode.VIDEO)
-    var height by mutableStateOf("best")
-    var container by mutableStateOf("mp4")
-    var audioStream by mutableStateOf("best")
-    var bitrate by mutableStateOf("192")
+    var mode by mutableStateOf(Mode.entries.firstOrNull { it.key == prefs.getString("mode", null) } ?: Mode.VIDEO)
+    /** The resolution picked, a ceiling: a video without it gets the highest one under it. */
+    var height by mutableStateOf(saved("height", "best") { it == "best" || it.toIntOrNull() != null })
+    var container by mutableStateOf(saved("container", "mp4") { it in listOf("mp4", "mkv") })
+    var audioStream by mutableStateOf(saved("audio_stream", "best") { it in listOf("best", "opus", "m4a") })
+    var bitrate by mutableStateOf(saved("mp3_quality", "192") { it in listOf("0", "320", "256", "192", "128") })
     var transcriptLang by mutableStateOf<String?>(null)
-    var transcriptFormat by mutableStateOf("txt")
-    var embed by mutableStateOf(true)
+    var transcriptFormat by mutableStateOf(saved("transcript_format", "txt") { it in listOf("txt", "srt", "vtt") })
+    var embed by mutableStateOf(prefs.getBoolean("embed", true))
+
+    /** A newer release, until it's installed or put off. */
+    var update by mutableStateOf<Update?>(null)
+        private set
+    /** How far the update's download has got, 0 to 1, while it runs. */
+    var updateProgress by mutableStateOf<Float?>(null)
+        private set
+    var updateError by mutableStateOf<String?>(null)
+        private set
+    private var updateJob: Job? = null
 
     // "Only a part": the times stay as typed, the switch decides if they count.
     var partOn by mutableStateOf(false)
@@ -124,6 +152,53 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     init {
         // Python takes a moment to start the first time; do it before it's needed.
         viewModelScope.launch { runCatching { Engine.warmUp(getApplication()) } }
+        // Each choice is saved as soon as it's made.
+        viewModelScope.launch {
+            snapshotFlow { listOf(mode.key, height, container, audioStream, bitrate, transcriptFormat, embed) }
+                .drop(1)
+                .collect {
+                    prefs.edit {
+                        putString("mode", mode.key)
+                        putString("height", height)
+                        putString("container", container)
+                        putString("audio_stream", audioStream)
+                        putString("mp3_quality", bitrate)
+                        putString("transcript_format", transcriptFormat)
+                        putBoolean("embed", embed)
+                    }
+                }
+        }
+        // A quiet look for a newer release; no network is no news.
+        viewModelScope.launch { update = runCatching { Updates.check() }.getOrNull() }
+    }
+
+    private fun saved(key: String, default: String, valid: (String) -> Boolean): String =
+        prefs.getString(key, null)?.takeIf(valid) ?: default
+
+    /** Download the update, then hand it to Android's installer. */
+    fun installUpdate() {
+        val release = update ?: return
+        if (updateJob?.isActive == true) return
+        updateError = null
+        updateProgress = 0f
+        updateJob = viewModelScope.launch {
+            try {
+                val apk = Updates.download(getApplication(), release) { updateProgress = it }
+                Updates.install(getApplication(), apk)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                updateError = e.localizedMessage ?: e.toString()
+            } finally {
+                updateProgress = null
+            }
+        }
+    }
+
+    fun dismissUpdate() {
+        updateJob?.cancel()
+        update = null
+        updateError = null
     }
 
     /** The links in the box when there are several; empty for one or none. */
@@ -177,7 +252,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         // the link names this video, so the list is the option.
         partOn = false
         wholePlaylist = false
-        if (height != "best" && height.toIntOrNull() !in video.heights) height = "best"
         transcriptLang = defaultTranscript(video.transcripts)
         val candidates = video.thumbnails.ifEmpty { listOf(video.thumbnail) }.filter { it.isNotEmpty() }
         if (candidates.isNotEmpty()) {
@@ -189,7 +263,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** The interface language first, then English, then whatever is listed first. */
+    /**
+     * The interface language first, then English, then whatever is listed
+     * first. The list comes best first, so "en-orig" wins over a translated "en".
+     */
     private fun defaultTranscript(tracks: List<Transcript>): String? {
         val wanted = listOf(Engine.language(getApplication()), "en")
         for (lang in wanted) {
@@ -213,14 +290,22 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             else -> 1
         }
 
-    /** Resolutions to offer: the video's own, or the standard ceilings for several. */
+    /** Resolutions to offer: the video's own, or the standard ceilings until one is read. */
     val heights: List<Int>
-        get() = if (links.isNotEmpty()) Links.STANDARD_HEIGHTS else shown?.heights.orEmpty()
+        get() = shown?.heights ?: Links.STANDARD_HEIGHTS
 
-    /** Transcript languages to offer; several links get the interface language and English. */
+    /** The offered resolution for the one picked: the same, or the highest under it. */
+    val heightShown: String
+        get() {
+            val wanted = height.toIntOrNull() ?: return "best"
+            return heights.filter { it <= wanted }.maxOrNull()?.toString() ?: "best"
+        }
+
+    /** Transcript languages to offer; several links get each video's own, the interface language and English. */
     val transcripts: List<Transcript>?
         get() = if (links.isNotEmpty()) {
-            listOf(Engine.language(getApplication()), "en").distinct().map { Transcript(it, false) }
+            listOf(Transcript(Transcript.ORIGINAL, true, "original")) +
+                listOf(Engine.language(getApplication()), "en").distinct().map { Transcript(it, false) }
         } else {
             shown?.transcripts
         }
@@ -246,7 +331,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             else -> return null  // the fields say what's wrong
         }
         val one = when (mode) {
-            Mode.VIDEO -> DownloadRequest(link, title, "video", height, container, embed, part)
+            Mode.VIDEO -> DownloadRequest(link, title, "video", heightShown, container, embed, part)
             Mode.AUDIO -> DownloadRequest(link, title, "audio", audioStream, "mp4", embed, part)
             Mode.MP3 -> DownloadRequest(link, title, "mp3", bitrate, "mp4", embed, part)
             Mode.TRANSCRIPT -> {
