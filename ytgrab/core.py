@@ -802,13 +802,13 @@ def common_transcripts(lang):
 
 
 def _transcripts(info):
-    """The transcripts worth offering, best first.
+    """The transcripts on offer, best first.
 
     Tracks people wrote come first, then YouTube's automatic one in the
     video's own language (yt-dlp calls it "en-orig" and so on), then its
-    machine translations into the app's languages. YouTube translates into
-    some 200 languages: offering them all buried the original, and an "en"
-    that is the same track sorted ahead of "en-orig".
+    machine translations: into the app's languages, then every other one
+    YouTube offers. Sorted A to Z instead, the original sat among some 200
+    translations, behind an "en" that is the same track - which is left out.
     """
     manual = sorted(code for code in info.get("subtitles") or {} if code != "live_chat")
     automatic = info.get("automatic_captions") or {}
@@ -820,9 +820,11 @@ def _transcripts(info):
         return tracks + [{"code": code, "auto": True, "kind": "original"}
                          for code in sorted(automatic) if code not in manual]
     tracks += [{"code": code, "auto": True, "kind": "original"} for code in originals]
-    for code in i18n.languages():
-        if code in automatic and code not in manual and f"{code}-orig" not in automatic:
-            tracks.append({"code": code, "auto": True, "kind": "translated"})
+    first = [code for code in i18n.languages() if code in automatic]
+    for code in first + sorted(code for code in automatic if code not in first):
+        if code in manual or code.endswith("-orig") or f"{code}-orig" in automatic:
+            continue
+        tracks.append({"code": code, "auto": True, "kind": "translated"})
     return tracks
 
 

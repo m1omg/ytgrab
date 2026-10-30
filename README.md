@@ -98,7 +98,8 @@ captions is fetched, so it finishes in a second or two. The list offers:
 
 * subtitles *written by people*, when the video has any;
 * the *original* - YouTube's automatic captions in the language spoken;
-* YouTube's *automatic translation* into Slovak or English.
+* YouTube's *automatic translations*: Slovak and English first, then every
+  other language YouTube translates into.
 
 The app picks its own language if it can, then English, and prefers the
 original to a translation - so an English video gets the original English
