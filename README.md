@@ -198,6 +198,9 @@ download engine - with a phone-shaped screen:
   link is filled in and read straight away.
 * Downloads keep running in the background, one after another, with progress,
   how many are waiting and *Cancel* / *Cancel all* in the notification.
+  Android 15 and newer allow that for six hours a day: then the download in
+  progress stops (*Try again* restarts it) and the rest carry on when you
+  open DLPizer.
 * Finished files land in **Download/DLPizer**, ready for any player, file
   manager or the *Share* button.
 * It follows the phone's language (English or Slovak), and on Android 13+ the

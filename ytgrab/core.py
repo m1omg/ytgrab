@@ -302,8 +302,8 @@ def clean_error(message, lang=None, login=None):
 
 
 _TAG_RE = re.compile(r"<[^>]*>")
-_TIMESTAMP_RE = re.compile(r"\d{1,2}:\d{2}:\d{2}[.,]\d{3}\s*-->")
-_CUE_HEADERS = ("WEBVTT", "Kind:", "Language:", "NOTE", "STYLE", "REGION")
+# WebVTT may leave the hours out ("01:02.345 -->"), as ffmpeg writes it.
+_TIMESTAMP_RE = re.compile(r"\d{2}:\d{2}[.,]\d{3}\s*-->")
 
 
 def subtitles_to_text(path, width=80):
@@ -313,15 +313,22 @@ def subtitles_to_text(path, width=80):
     before it, so consecutive duplicate lines are dropped. Timings are
     discarded on purpose - srt and vtt stay available when they are wanted.
     """
-    lines = Path(path).read_text(encoding="utf-8", errors="replace").splitlines()
+    lines = Path(path).read_text(encoding="utf-8-sig", errors="replace").splitlines()
     out = []
+    in_cue = False  # past the timing line of the block this line is in
     for index, line in enumerate(lines):
-        line = line.strip()
-        if not line or line.startswith(_CUE_HEADERS) or _TIMESTAMP_RE.search(line):
+        # Only an empty line ends a block: YouTube's cues hold lines of spaces.
+        if not line:
+            in_cue = False
             continue
-        # A cue number or identifier is whatever sits just above a timestamp.
+        line = line.strip()
+        if _TIMESTAMP_RE.search(line):
+            in_cue = True
+            continue
+        # Before a timing line there are only headers, comments, styles and
+        # cue numbers, and a cue number is whatever sits just above one.
         following = lines[index + 1].strip() if index + 1 < len(lines) else ""
-        if _TIMESTAMP_RE.search(following):
+        if not in_cue or not line or _TIMESTAMP_RE.search(following):
             continue
         # Tags go before entities, so that an escaped &lt;word&gt; survives.
         # YouTube double-encodes apostrophes (&amp;#39;), hence unescaping twice.
@@ -1201,6 +1208,26 @@ def _fetch_part(url, opts, work_dir, section, progress_hook):
     return find_output_file(work_dir)
 
 
+_WORK_PREFIX = ".ytgrab-tmp-"
+# A scratch directory outlives its download only when the app was closed or
+# killed mid-way; one untouched for this long belongs to no download running.
+_STALE_WORK_SECONDS = 24 * 3600
+
+
+def _sweep_work_dirs(dest_dir):
+    """Delete the scratch directories that downloads cut short left behind."""
+    cutoff = time.time() - _STALE_WORK_SECONDS
+    for work_dir in dest_dir.glob(_WORK_PREFIX + "*"):
+        try:
+            if not work_dir.is_dir():
+                continue
+            touched = max(p.stat().st_mtime for p in (work_dir, *work_dir.rglob("*")))
+        except OSError:
+            continue
+        if touched < cutoff:
+            shutil.rmtree(work_dir, ignore_errors=True)
+
+
 def download(url, dest_dir, mode, quality, container="mp4", embed_thumbnail=True,
              progress_hook=None, postprocessor_hook=None, cookies_browser=None,
              section=None):
@@ -1215,7 +1242,8 @@ def download(url, dest_dir, mode, quality, container="mp4", embed_thumbnail=True
         section = None
     dest_dir = Path(dest_dir).expanduser()
     dest_dir.mkdir(parents=True, exist_ok=True)
-    work_dir = dest_dir / (".ytgrab-tmp-" + uuid.uuid4().hex[:8])
+    _sweep_work_dirs(dest_dir)
+    work_dir = dest_dir / (_WORK_PREFIX + uuid.uuid4().hex[:8])
     work_dir.mkdir()
 
     try:

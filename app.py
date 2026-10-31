@@ -179,7 +179,8 @@ def api_cancel(job_id):
 @app.post("/api/job/<job_id>/retry")
 def api_retry(job_id):
     job = queue.get(job_id)
-    if job:
+    # Only a failed or cancelled job starts again; a finished one keeps its file.
+    if job and job.state in (jobs.FAILED, jobs.CANCELLED):
         shutil.rmtree(DOWNLOAD_DIR / job.id, ignore_errors=True)
         queue.retry(job)
     return jsonify(ok=True)

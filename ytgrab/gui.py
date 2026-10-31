@@ -4,7 +4,7 @@ import sys
 import threading
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QObject, QThread, QTimer, Signal, QUrl, QPoint, QLocale, QSettings
+from PySide6.QtCore import Qt, QObject, QTimer, Signal, QUrl, QPoint, QLocale, QSettings
 from PySide6.QtGui import (
     QPixmap, QImage, QDesktopServices, QIcon, QPainter, QColor, QPolygon,
     QAction, QActionGroup, QPalette,
@@ -40,20 +40,26 @@ def muted_style():
 # workers
 # --------------------------------------------------------------------------
 
-class InfoWorker(QThread):
-    finished_ok = Signal(dict)
-    failed = Signal(str)
+class InfoWorker(QObject):
+    """Reads a link's details on a plain daemon thread, which closing the
+    window never has to wait for. The token says which read it belongs to."""
 
-    def __init__(self, url, cookies_browser=None):
+    finished_ok = Signal(int, object)
+    failed = Signal(int, str)
+
+    def __init__(self, token, url, cookies_browser=None):
         super().__init__()
-        self.url = url
+        self.token, self.url = token, url
         self.cookies_browser = cookies_browser
 
-    def run(self):
+    def start(self):
+        threading.Thread(target=self._run, daemon=True).start()
+
+    def _run(self):
         try:
-            self.finished_ok.emit(core.fetch_info(self.url, self.cookies_browser))
+            self.finished_ok.emit(self.token, core.fetch_info(self.url, self.cookies_browser))
         except Exception as exc:  # noqa: BLE001
-            self.failed.emit(core.clean_error(exc, login=self.cookies_browser))
+            self.failed.emit(self.token, core.clean_error(exc, login=self.cookies_browser))
 
 
 class ThumbLoader(QObject):
@@ -321,6 +327,7 @@ class MainWindow(QMainWindow):
         saved_height = str(self.settings.value("video_height", "best"))
         self.video_height = saved_height if saved_height.isdigit() else "best"
         self.info_worker = None
+        self.read_token = 0       # which read of a link is the one still wanted
         self.thumb_token = 0      # which read the thumbnail on screen belongs to
         self.info = None          # last metadata read, for relabelling
         self.links = []           # the links in the box, when there are several
@@ -725,7 +732,9 @@ class MainWindow(QMainWindow):
         for entry in self.transcripts:
             self.tlang_combo.addItem(core.transcript_label(entry), entry["code"])
         if not self.transcripts:
-            self.tlang_combo.addItem(t("transcript_none"), "")
+            # A video that was read and has none, or one not read yet.
+            self.tlang_combo.addItem(
+                t("transcript_none") if self.info else t("transcript_fetch_first"), "")
             return
         found = self.tlang_combo.findData(previous)
         self.tlang_combo.setCurrentIndex(
@@ -898,12 +907,27 @@ class MainWindow(QMainWindow):
             text = t("queue_add" if busy else "download")
         self.download_btn.setText(text)
 
+    def _box_link(self):
+        """The one link in the box ("Watch this: https://..." gives the link),
+        or None when it holds several."""
+        text = self.url_edit.text().strip()
+        found = core.find_links(text)
+        if len(found) > 1:
+            return None
+        return found[0] if found else text
+
     def _on_url_changed(self):
         text = self.url_edit.text()
         if "\n" in text or "\r" in text:
             # A pasted list stays on one line, a space between links.
             self.url_edit.setText(" ".join(text.split()))
             return
+        if self.fetching and self._box_link() != self.info_worker.url:
+            # The link being read has left the box: its details would land on
+            # another one. Drop the read, so the new link can be fetched.
+            self.read_token += 1
+            self._reset_fetch_btn()
+            self.statusBar().showMessage(self._ffmpeg_status())
         found = core.find_links(text)
         several = found if len(found) > 1 else []
         if self.info is not None or several != self.links:
@@ -938,17 +962,15 @@ class MainWindow(QMainWindow):
             self.fetch_info()
 
     def fetch_info(self):
-        text = self.url_edit.text().strip()
-        found = core.find_links(text)
-        if len(found) > 1:
+        url = self._box_link()
+        if url is None:
             return  # several links download as they are
-        url = found[0] if found else text
         if not core.is_supported_url(url):
             self.statusBar().showMessage(t("invalid_link"), 5000)
             return
-        if self.info_worker and self.info_worker.isRunning():
+        if self.fetching:
             return
-        if url != text:
+        if url != self.url_edit.text().strip():
             self.url_edit.setText(url)  # "Watch this: https://..." becomes the link
 
         self.fetching = True
@@ -956,10 +978,10 @@ class MainWindow(QMainWindow):
         self.fetch_btn.setText(t("fetching"))
         self.statusBar().showMessage(t("reading_details"))
 
-        self.info_worker = InfoWorker(url, self.cookies_browser)
+        self.read_token += 1
+        self.info_worker = InfoWorker(self.read_token, url, self.cookies_browser)
         self.info_worker.finished_ok.connect(self._on_info)
         self.info_worker.failed.connect(self._on_info_failed)
-        self.info_worker.finished.connect(self._reset_fetch_btn)
         self.info_worker.start()
 
     def _reset_fetch_btn(self):
@@ -1000,7 +1022,10 @@ class MainWindow(QMainWindow):
             self.playlist_name.setVisible(bool(playlist["title"]))
         self.info_panel.setVisible(True)
 
-    def _on_info(self, info):
+    def _on_info(self, token, info):
+        if token != self.read_token:
+            return  # read for a link that has left the box since
+        self._reset_fetch_btn()
         self.info = info
         self.playlist_this.setChecked(True)  # the link names this video; the list is the option
         self._fill_resolutions(info["heights"])
@@ -1028,7 +1053,10 @@ class MainWindow(QMainWindow):
         if pix.loadFromData(data):
             self.thumb_label.setPixmap(pix)
 
-    def _on_info_failed(self, message):
+    def _on_info_failed(self, token, message):
+        if token != self.read_token:
+            return
+        self._reset_fetch_btn()
         self.info = None
         self._show_panel()
         self._sync_download_btn()
@@ -1065,7 +1093,8 @@ class MainWindow(QMainWindow):
         }[mode]()
 
         if mode == "transcript" and not quality:
-            QMessageBox.warning(self, t("download_failed_title"), t("transcript_none"))
+            # Says why: the video has none, or it hasn't been read yet.
+            QMessageBox.warning(self, t("download_failed_title"), self.tlang_combo.currentText())
             return
 
         section = None

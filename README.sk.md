@@ -206,6 +206,9 @@ možnosti aj sťahovací engine – len s obrazovkou prispôsobenou telefónu:
   DLPizer; odkaz sa vyplní a hneď načíta.
 * Sťahovanie beží ďalej aj na pozadí, jedno po druhom, s priebehom, počtom
   čakajúcich a tlačidlami *Zrušiť* / *Zrušiť všetko* v upozornení.
+  Android 15 a novší to dovolí šesť hodín denne: potom sa prebiehajúce
+  sťahovanie zastaví (*Skúsiť znova* ho spustí odznova) a ostatné pokračujú,
+  keď DLPizer otvoríte.
 * Hotové súbory sa uložia do priečinka **Download/DLPizer**, odkiaľ ich otvorí
   ktorýkoľvek prehrávač, správca súborov či tlačidlo *Zdieľať*.
 * Riadi sa jazykom telefónu (angličtina alebo slovenčina) a na Androide 13+

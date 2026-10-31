@@ -79,6 +79,7 @@ import dev.ytgrab.app.R
 import dev.ytgrab.app.SavedFile
 import dev.ytgrab.app.Transcript
 import dev.ytgrab.app.VideoInfo
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -749,5 +750,6 @@ private fun formatDuration(seconds: Int): String {
     val h = seconds / 3600
     val m = seconds % 3600 / 60
     val s = seconds % 60
-    return if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%d:%02d".format(m, s)
+    // Western digits whatever the phone's locale, like Parts.format().
+    return if (h > 0) "%d:%02d:%02d".format(Locale.ROOT, h, m, s) else "%d:%02d".format(Locale.ROOT, m, s)
 }

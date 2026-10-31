@@ -114,10 +114,12 @@ object Downloads {
         val item = list[index]
         // A playlist listing itself would never end.
         val videos = entries.filter { (url, _) -> url != item.request.url }
-        if (videos.isEmpty()) {
-            list.toMutableList().also { it[index] = item.copy(state = ItemState.FAILED, error = emptyError) }
-        } else {
-            list.subList(0, index) +
+        when {
+            // Cancelled while the list was being read: none of its videos are wanted.
+            item.cancelling -> list.toMutableList().also { it[index] = item.copy(state = ItemState.CANCELLED) }
+            videos.isEmpty() ->
+                list.toMutableList().also { it[index] = item.copy(state = ItemState.FAILED, error = emptyError) }
+            else -> list.subList(0, index) +
                 videos.map { (url, title) -> QueueItem(item.request.copy(url = url, title = title)) } +
                 list.subList(index + 1, list.size)
         }

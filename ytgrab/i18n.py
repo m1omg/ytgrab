@@ -102,6 +102,7 @@ STRINGS = {
         "transcript_original_any": "Each video's own language (automatic)",
         "transcript_translated": "{code} - automatic translation",
         "transcript_none": "This video has no transcript.",
+        "transcript_fetch_first": "Fetch the video first to see which transcripts it has.",
 
         # -- destination --
         "save_to": "Save to:",
@@ -355,6 +356,7 @@ STRINGS = {
         "transcript_original_any": "Pôvodný jazyk každého videa (automatické)",
         "transcript_translated": "{code} – automatický preklad",
         "transcript_none": "Toto video nemá prepis.",
+        "transcript_fetch_first": "Najprv video načítajte, aby bolo vidieť, aké prepisy má.",
 
         # -- destination --
         "save_to": "Uložiť do:",
