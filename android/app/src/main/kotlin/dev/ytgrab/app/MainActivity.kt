@@ -56,6 +56,16 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        // Downloads still waiting when Android stopped the service carry on
+        // now that the app is open again.
+        val queue = Downloads.queue.value
+        if (queue.any { it.state == ItemState.WAITING } && queue.none { it.state == ItemState.RUNNING }) {
+            DownloadService.start(this)
+        }
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handle(intent)

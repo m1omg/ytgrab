@@ -9,6 +9,7 @@ import android.os.IBinder
 import android.os.PowerManager
 import android.os.SystemClock
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -67,6 +68,10 @@ class DownloadService : Service() {
                 lock.acquire(4 * 60 * 60 * 1000L)  // each download gets the full allowance
                 try {
                     run(item)
+                } catch (e: CancellationException) {
+                    // The service is going away; onDestroy() has seen to the queue,
+                    // and what waits carries on when DLPizer is next opened.
+                    throw e
                 } catch (e: Exception) {
                     Downloads.update(item.id) {
                         it.copy(state = ItemState.FAILED, error = e.localizedMessage ?: e.toString())
@@ -143,6 +148,14 @@ class DownloadService : Service() {
             lastNotified = now
             Downloads.queue.value.firstOrNull { it.id == id }?.let { Notifications.update(this, it, waiting()) }
         }
+    }
+
+    /**
+     * Android 15 and later give a data-sync service six hours a day, then ask
+     * it to stop; one that doesn't is killed with the whole app.
+     */
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        stopSelf()
     }
 
     override fun onDestroy() {

@@ -30,7 +30,10 @@ object Parts {
         val fields = compact.split(':', '.', ',').map { it.toLongOrNull() ?: -1L }
         // Only the leading field may run past 59: "90:00" is fine, "1:75" a typo.
         require(fields.first() in 0..1_000_000 && fields.drop(1).all { it in 0..59 }) { compact }
-        return fields.fold(0L) { total, field -> total * 60 + field }.toInt()
+        val seconds = fields.fold(0L) { total, field -> total * 60 + field }
+        // A million hours would wrap round to a negative time.
+        require(seconds <= Int.MAX_VALUE) { compact }
+        return seconds.toInt()
     }
 
     /**

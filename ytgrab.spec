@@ -225,7 +225,7 @@ if ONEDIR:
         info_plist={
             "NSHighResolutionCapable": True,
             "LSMinimumSystemVersion": "12.0",
-            "CFBundleShortVersionString": "1.6.0",
+            "CFBundleShortVersionString": "1.6.1",
         },
     )
 else:

@@ -250,6 +250,7 @@ const $ = id => document.getElementById(id);
 let mode = "video";
 let info = null;     // the video or playlist last read
 let links = [];      // the links in the box, when there are several
+let reading = null;  // the read under way, as {url}; dropped when its link leaves the box
 let poll = null;
 let busy = false;    // whether the queue has anything running or waiting
 
@@ -283,6 +284,11 @@ function findLinks(text) {
     if (!found.includes(m)) found.push(m);
   }
   return found;
+}
+// The one link in the box, or null when it holds several.
+function boxLink() {
+  const found = findLinks($("url").value);
+  return found.length > 1 ? null : found[0] || $("url").value.trim();
 }
 
 // The best-ranked thumbnail doesn't always exist; the others are tried in turn.
@@ -328,10 +334,11 @@ function transcriptLabel(s) {
   if (s.kind === "translated") return fill(T.transcript_translated, fields);
   return s.auto ? fill(T.transcript_auto, fields) : s.code;
 }
+// null until the video is read; then the tracks it has, if any.
 function fillTranscripts(tracks) {
   const tl = $("tlang");
-  if (!tracks.length) {
-    fillSelect(tl, [["", T.transcript_none]]);
+  if (!tracks || !tracks.length) {
+    fillSelect(tl, [["", tracks ? T.transcript_none : T.transcript_fetch_first]]);
     return;
   }
   fillSelect(tl, tracks.map(s => [s.code, transcriptLabel(s)]));
@@ -402,13 +409,18 @@ $("scopeThis").onchange = $("scopeWhole").onchange = () => { syncPart(); syncBut
 
 // Several links show as a batch at once; a single one waits for Fetch.
 $("url").addEventListener("input", () => {
+  if (reading && boxLink() !== reading.url) {
+    // The link being read has left the box: its details would land on another one.
+    reading = null;
+    $("fetch").textContent = T.fetch;
+  }
   const found = findLinks($("url").value);
   const now = found.length > 1 ? found : [];
+  $("fetch").disabled = !!reading || now.length > 1;
+  $("fetch").title = now.length > 1 ? T.read_one_link : "";
   if (now.join(" ") === links.join(" ") && !info) return;
   info = null;
   links = now;
-  $("fetch").disabled = links.length > 1;
-  $("fetch").title = links.length > 1 ? T.read_one_link : "";
   if (links.length > 1) {
     $("thumb").classList.add("hidden");
     $("title").textContent = plural("batch_title", links.length);
@@ -422,16 +434,18 @@ $("url").addEventListener("input", () => {
     $("opts").classList.remove("hidden");
   } else {
     $("info").classList.add("hidden");
+    // Until this link is read, its own resolutions and transcripts aren't known.
+    fillHeights(HEIGHTS);
+    fillTranscripts(null);
   }
   syncPart();
   syncButton();
 });
 
 async function fetchInfo() {
-  const found = findLinks($("url").value);
-  if (found.length > 1) return;
-  const url = found[0] || $("url").value.trim();
-  if (!url) return;
+  const url = boxLink();
+  if (!url || reading) return;
+  const read = reading = { url };
   $("fetch").disabled = true;
   $("fetch").textContent = "…";
   $("infoErr").classList.add("hidden");
@@ -442,6 +456,7 @@ async function fetchInfo() {
       body: JSON.stringify({ url })
     });
     const d = await r.json();
+    if (read !== reading) return;  // its link has left the box since
     if (!r.ok) throw new Error(d.error || T.read_failed);
     info = d;
     links = [];
@@ -470,11 +485,15 @@ async function fetchInfo() {
     fillTranscripts(d.transcripts || []);
     $("opts").classList.remove("hidden");
   } catch (e) {
+    if (read !== reading) return;
     $("infoErr").textContent = e.message;
     $("infoErr").classList.remove("hidden");
   } finally {
-    $("fetch").disabled = links.length > 1;
-    $("fetch").textContent = T.fetch;
+    if (read === reading) {
+      reading = null;
+      $("fetch").disabled = links.length > 1;
+      $("fetch").textContent = T.fetch;
+    }
   }
 }
 
@@ -486,6 +505,12 @@ $("go").onclick = async () => {
                 : mode === "audio" ? $("acodec").value
                 : mode === "transcript" ? $("tlang").value
                 : $("bitrate").value;
+  if (mode === "transcript" && !quality) {
+    // The list says why: the video has no transcript, or it hasn't been read.
+    $("goErr").textContent = $("tlang").selectedOptions[0]?.textContent || T.transcript_fetch_first;
+    $("goErr").classList.remove("hidden");
+    return;
+  }
   const body = {
     mode,
     quality,
