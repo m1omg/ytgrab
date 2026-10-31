@@ -149,6 +149,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private var fetchJob: Job? = null
 
+    /** A link asked to be read while another one was; it is read next. */
+    private var nextFetch: String? = null
+
     init {
         // Python takes a moment to start the first time; do it before it's needed.
         viewModelScope.launch { runCatching { Engine.warmUp(getApplication()) } }
@@ -225,22 +228,43 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun fetch() {
         val link = singleLink()
-        if (link.isEmpty() || links.isNotEmpty() || fetchJob?.isActive == true) return
+        if (link.isEmpty() || links.isNotEmpty()) return
+        if (fetchJob?.isActive == true) {
+            // Shared while another link is read: it waits its turn. Only the
+            // last one asked for waits, as only it can be in the box.
+            nextFetch = link
+            return
+        }
         fetching = true
-        message = null
         fetchJob = viewModelScope.launch {
             try {
-                val result = Engine.fetchInfo(getApplication(), link)
-                if (result.optBoolean("ok")) {
-                    show(link, VideoInfo.from(result.getJSONObject("info")))
-                } else {
-                    message = result.optString("error")
+                var next: String? = link
+                while (next != null) {
+                    val current = next
+                    read(current)
+                    // The link that waited, unless it was just read or has left the box.
+                    next = nextFetch.also { nextFetch = null }
+                        ?.takeIf { it != current && links.isEmpty() && it == singleLink() }
                 }
-            } catch (e: Exception) {
-                message = e.localizedMessage ?: e.toString()
             } finally {
                 fetching = false
             }
+        }
+    }
+
+    private suspend fun read(link: String) {
+        message = null
+        try {
+            val result = Engine.fetchInfo(getApplication(), link)
+            if (result.optBoolean("ok")) {
+                show(link, VideoInfo.from(result.getJSONObject("info")))
+            } else {
+                message = result.optString("error")
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            message = e.localizedMessage ?: e.toString()
         }
     }
 

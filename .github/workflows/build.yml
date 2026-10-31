@@ -65,7 +65,6 @@ jobs:
     needs: version
     if: needs.version.outputs.build == 'true'
     runs-on: ${{ matrix.os }}
-    continue-on-error: ${{ matrix.optional || false }}
     timeout-minutes: 40    # fail rather than queue forever if runners are scarce
     strategy:
       fail-fast: false
@@ -104,7 +103,6 @@ jobs:
             pyside: PySide6-Essentials==6.9.3
             ffmpeg-tag: macosx_10_9_x86_64
             qjs: darwin-x86_64
-            optional: true      # never block a release on this leg
 
     steps:
       - uses: actions/checkout@v4
@@ -392,7 +390,10 @@ jobs:
 
   release:
     needs: [version, build, android]
-    if: ${{ always() && needs.version.outputs.tag != '' }}
+    # Only once every platform has built. A release missing one would still
+    # count as out, so that platform would never get the version; this way
+    # nothing is tagged, and the next run builds the version again.
+    if: ${{ needs.version.outputs.tag != '' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4

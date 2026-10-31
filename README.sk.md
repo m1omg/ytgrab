@@ -203,7 +203,8 @@ Aplikácia pre Android robí to isté ako tá pre počítač – rovnaké režim
 možnosti aj sťahovací engine – len s obrazovkou prispôsobenou telefónu:
 
 * V aplikácii YouTube (alebo v prehliadači) video **zdieľajte** a vyberte
-  DLPizer; odkaz sa vyplní a hneď načíta.
+  DLPizer; odkaz sa vyplní a hneď načíta. Odkaz zdieľaný počas načítavania
+  iného sa načíta hneď po ňom.
 * Sťahovanie beží ďalej aj na pozadí, jedno po druhom, s priebehom, počtom
   čakajúcich a tlačidlami *Zrušiť* / *Zrušiť všetko* v upozornení.
   Android 15 a novší to dovolí šesť hodín denne: potom sa prebiehajúce
@@ -251,7 +252,8 @@ Aplikáciu nemožno zostaviť pre iný systém, než na akom bežíte: `.exe` pr
 Windows treba zostaviť na Windowse a `.app` pre macOS na macOS. Workflow
 GitHub Actions urobí všetky zostavenia na serveroch GitHubu. Keď sa do `main`
 zlúči nové číslo verzie v `ytgrab/__init__.py`, vydanie sa vytvorí samo; funguje
-aj pushnutie tagu ako `v1.0.0` alebo ručné spustenie v karte Actions.
+aj pushnutie tagu ako `v1.0.0` alebo ručné spustenie v karte Actions. Verzia
+vyjde, až keď sa zostavia všetky platformy; ak niektorá zlyhá, nevyjde nič.
 
 ### Android
 
@@ -271,7 +273,7 @@ cd android && ./gradlew assembleRelease
 Vydania sú podpísané kľúčom z dvoch tajomstiev (secrets) repozitára, aby sa
 každá verzia nainštalovala cez predchádzajúcu: `ANDROID_KEYSTORE_BASE64`
 (úložisko kľúčov v base64) a `ANDROID_KEYSTORE_PASSWORD`. Bez nich zlyhá časť
-workflowu pre Android a vydanie vyjde len so zostaveniami pre počítač.
+workflowu pre Android a s ňou celé vydanie.
 Úložisko kľúčov si odložte: telefón prijme len aktualizácie podpísané ním.
 
 ## Voliteľne: verzia pre prehliadač
