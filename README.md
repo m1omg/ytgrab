@@ -195,7 +195,8 @@ The Android app does what the desktop one does - the same modes, options and
 download engine - with a phone-shaped screen:
 
 * **Share** a video from the YouTube app (or a browser) and pick DLPizer; the
-  link is filled in and read straight away.
+  link is filled in and read straight away. One shared while another is still
+  being read is read right after it.
 * Downloads keep running in the background, one after another, with progress,
   how many are waiting and *Cancel* / *Cancel all* in the notification.
   Android 15 and newer allow that for six hours a day: then the download in
@@ -242,7 +243,8 @@ Binaries cannot be cross-compiled: a Windows `.exe` has to be built on Windows
 and a macOS `.app` on macOS. The GitHub Actions workflow does all the builds on
 GitHub's runners. Merging a new version number in `ytgrab/__init__.py` into
 `main` releases it by itself; pushing a tag like `v1.0.0`, or starting the
-workflow from the Actions tab, works too.
+workflow from the Actions tab, works too. A version is only released once
+every platform has built; if one fails, nothing goes out.
 
 ### Android
 
@@ -261,7 +263,7 @@ cd android && ./gradlew assembleRelease
 Release builds are signed with the key in two repository secrets, so every
 version installs over the last: `ANDROID_KEYSTORE_BASE64` (the keystore,
 base64-encoded) and `ANDROID_KEYSTORE_PASSWORD`. Without them the Android leg
-of the workflow fails and the release goes out with the desktop builds only.
+of the workflow fails, and with it the whole release.
 Keep a copy of the keystore: a phone only accepts updates signed with it.
 
 ## Optional: browser version

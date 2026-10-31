@@ -1157,6 +1157,16 @@ class MainWindow(QMainWindow):
 
     # -- updates -----------------------------------------------------------
 
+    @property
+    def update_busy(self):
+        return self._update_busy
+
+    @update_busy.setter
+    def update_busy(self, busy):
+        self._update_busy = busy
+        # A check asked for meanwhile would do nothing, so it can't be asked for.
+        self.update_now_action.setEnabled(not busy)
+
     def check_updates(self, manual=False):
         """Ask GitHub for a newer release, off the window's thread."""
         if self.update_busy:
