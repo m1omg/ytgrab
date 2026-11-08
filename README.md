@@ -18,22 +18,36 @@ updates are automatic again.
 
 ## Download
 
-Grab a build from the [Releases](../../releases) page:
+Grab a build from the [Releases](../../releases) page. Each desktop system has
+an installer, and a portable version that runs from wherever you put it:
 
-| Platform | File |
-| --- | --- |
-| Linux | `DLPizer-linux-x86_64` |
-| Windows | `DLPizer-windows-x86_64.exe` |
-| macOS (Apple Silicon) | `DLPizer-macos-arm64.zip` |
-| macOS (Intel) | `DLPizer-macos-x86_64.zip` |
-| Android (most phones) | `DLPizer-android-arm64.apk` |
-| Android (older 32-bit phones) | `DLPizer-android-arm32.apk` |
-| Android (not sure, Chromebooks) | `DLPizer-android-universal.apk` |
+| Platform | Installer | Portable |
+| --- | --- | --- |
+| Windows | `DLPizer-setup-windows-x86_64.exe` | `DLPizer-windows-x86_64.exe` |
+| macOS (Apple Silicon) | `DLPizer-macos-arm64.dmg` | `DLPizer-macos-arm64.zip` |
+| macOS (Intel) | `DLPizer-macos-x86_64.dmg` | `DLPizer-macos-x86_64.zip` |
+| Linux: Debian, Ubuntu, Mint, LMDE | `DLPizer-linux-x86_64.deb` | `DLPizer-linux-x86_64` |
+| Linux: Fedora, openSUSE | `DLPizer-linux-x86_64.rpm` | `DLPizer-linux-x86_64` |
+| Android (most phones) | `DLPizer-android-arm64.apk` | |
+| Android (older 32-bit phones) | `DLPizer-android-arm32.apk` | |
+| Android (not sure, Chromebooks) | `DLPizer-android-universal.apk` | |
 
-On Linux, mark it executable first: `chmod +x DLPizer-linux-x86_64`. It needs
-glibc 2.39 or newer: Ubuntu 24.04, Debian 13, LMDE 7, Fedora 40, Linux Mint 22
-or later, or a rolling distro such as Arch, CachyOS or openSUSE Tumbleweed
-(`ldd --version` shows yours).
+* **Windows installer:** installs for you alone, so it needs no administrator
+  rights, and adds DLPizer to the Start menu. Uninstall it under *Settings →
+  Apps*.
+* **macOS disk image:** open it and drag DLPizer onto *Applications*.
+* **Linux packages:** open the file in your software installer, or run
+  `sudo apt install ./DLPizer-linux-x86_64.deb` (Debian, Ubuntu, Mint, LMDE) or
+  `sudo dnf install ./DLPizer-linux-x86_64.rpm` (Fedora). DLPizer lands in your
+  applications menu, and the libraries it needs come along. On Arch, CachyOS
+  and other distros, use the portable version and
+  [`install-linux.sh`](#linux-menu-entry).
+* **Portable Linux version:** mark it executable first:
+  `chmod +x DLPizer-linux-x86_64`.
+
+Linux needs glibc 2.39 or newer: Ubuntu 24.04, Debian 13, LMDE 7, Fedora 40,
+Linux Mint 22 or later, or a rolling distro such as Arch, CachyOS or openSUSE
+Tumbleweed (`ldd --version` shows yours).
 
 On Android, open the downloaded APK and allow your browser or file manager to
 install apps when asked. Newer versions install straight over older ones.
@@ -56,6 +70,11 @@ next time. While downloads are running it waits until they finish.
 automatically* turns the check at start off. Where the app can't replace
 itself, such as a folder it can't write to or a Mac app run straight from the
 download, it offers the release page instead.
+
+Installed from the `.deb` or `.rpm`, the program belongs to the package
+manager, so *Download and install* fetches the new package into Downloads and
+opens it in your software installer, which asks for your password; start
+DLPizer again once it's done.
 
 On Android a card at the top offers the update; the APK for your phone is
 downloaded and checked the same way, and Android asks before installing it

@@ -77,8 +77,27 @@ def asset_name():
         # under Rosetta.
         return "DLPizer-macos-%s.zip" % ("arm64" if machine == "arm64" else "x86_64")
     if sys.platform.startswith("linux") and machine in ("x86_64", "amd64"):
-        return "DLPizer-linux-x86_64"
+        kind = package_kind()
+        return f"DLPizer-linux-x86_64.{kind}" if kind else "DLPizer-linux-x86_64"
     return None
+
+
+def package_kind(target=None):
+    """"deb" or "rpm" when this copy came from one of the Linux packages.
+
+    The package manager owns those files, so the update is the new package,
+    handed to the system's software installer.
+    """
+    if not sys.platform.startswith("linux"):
+        return None
+    target = target or install_target()
+    if target is None:
+        return None
+    try:
+        kind = (target.parent / "packaged").read_text().strip()
+    except OSError:
+        return None
+    return kind if kind in ("deb", "rpm") else None
 
 
 def install_target():
@@ -208,8 +227,16 @@ def install(release, target, progress=None, cancelled=None):
     """Download the release and put it in target's place.
 
     The download goes beside target, so the swap is a rename on one disk and
-    a failure leaves the old version where it was.
+    a failure leaves the old version where it was. A copy installed from a
+    Linux package gets the new package instead, saved with the downloads;
+    its path is returned, for open_package().
     """
+    kind = package_kind(target)
+    if kind:
+        folder = next((d for d in (Path.home() / "Downloads", Path.home()) if d.is_dir()))
+        package = folder / f"DLPizer-{release.version}-linux-x86_64.{kind}"
+        download(release, package, progress, cancelled)
+        return package
     stage = target.parent / f".{target.name}.update"
     _remove(stage)
     try:
@@ -271,13 +298,13 @@ def _install_app(archive, app):
         _remove(unpacked)
 
 
-def relaunch(target):
-    """Start the installed version as a process of its own."""
-    if sys.platform == "darwin":
-        subprocess.Popen(["open", "-n", str(target)])
-        return
-    # Without these the new program would take itself for part of this one
-    # and look for its files in this one's temporary folder.
+def _outside_env():
+    """This environment without what PyInstaller set for this program.
+
+    Without it a new DLPizer would take itself for part of this one and look
+    for its files in this one's temporary folder, and system programs would
+    load this one's libraries instead of their own.
+    """
     env = {key: value for key, value in os.environ.items()
            if not key.startswith("_PYI_") and key != "_MEIPASS2"}
     if "LD_LIBRARY_PATH_ORIG" in env:
@@ -285,7 +312,29 @@ def relaunch(target):
     else:
         env.pop("LD_LIBRARY_PATH", None)
     env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
-    kwargs = {"env": env, "stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL,
+    return env
+
+
+def open_package(package):
+    """Hand a downloaded package to the system's software installer.
+
+    False when there is nothing to open it with.
+    """
+    try:
+        subprocess.Popen(["xdg-open", str(package)], env=_outside_env(),
+                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL, start_new_session=True)
+        return True
+    except OSError:
+        return False
+
+
+def relaunch(target):
+    """Start the installed version as a process of its own."""
+    if sys.platform == "darwin":
+        subprocess.Popen(["open", "-n", str(target)])
+        return
+    kwargs = {"env": _outside_env(), "stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL,
               "stderr": subprocess.DEVNULL}
     if sys.platform == "win32":
         kwargs["creationflags"] = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP

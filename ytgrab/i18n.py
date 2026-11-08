@@ -163,6 +163,14 @@ STRINGS = {
         "update_ask_plain": ("Update now? DLPizer downloads it, replaces itself and starts "
                              "again. Your settings stay as they are."),
         "update_ask_page": "Open the page to download it?",
+        "update_ask_package": ("Update now? DLPizer downloads the new package ({size}) and "
+                               "opens it in your system's software installer, which asks "
+                               "for your password."),
+        "update_install_package": "Download and install",
+        "update_package_opened": ("The installer for DLPizer {version} has opened. Install it "
+                                  "there, then start DLPizer again."),
+        "update_package_saved": ("DLPizer {version} is saved as {path}. Open that file to "
+                                 "install it, then start DLPizer again."),
         "update_now": "Update and restart",
         "update_later": "Not now",
         "update_open_page": "Open download page",
@@ -421,6 +429,13 @@ STRINGS = {
         "update_ask_plain": ("Aktualizovať teraz? DLPizer novú verziu stiahne, nahradí sa ňou "
                              "a znova sa spustí. Nastavenia zostanú tak, ako sú."),
         "update_ask_page": "Otvoriť stránku, kde si ju stiahnete?",
+        "update_ask_package": ("Aktualizovať teraz? DLPizer stiahne nový balík ({size}) a otvorí "
+                               "ho v inštalátore softvéru vášho systému, ktorý sa spýta na heslo."),
+        "update_install_package": "Stiahnuť a nainštalovať",
+        "update_package_opened": ("Otvoril sa inštalátor DLPizer {version}. Nainštalujte ho tam "
+                                  "a potom DLPizer spustite znova."),
+        "update_package_saved": ("DLPizer {version} sa uložil ako {path}. Otvorením tohto súboru "
+                                 "ho nainštalujete; potom DLPizer spustite znova."),
         "update_now": "Aktualizovať a reštartovať",
         "update_later": "Teraz nie",
         "update_open_page": "Otvoriť stránku na stiahnutie",
