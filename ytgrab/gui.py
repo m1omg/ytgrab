@@ -94,7 +94,7 @@ class UpdateBridge(QObject):
     checked = Signal(object, bool)      # the newer Release or None; asked for by hand
     check_failed = Signal(str, bool)
     progress = Signal(object, object)   # bytes so far, bytes in all
-    installed = Signal()
+    installed = Signal(str)             # a package to open, or "" once swapped in
     install_failed = Signal(str)
     cancelled = Signal()
 
@@ -1212,7 +1212,11 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(t("update_after_downloads", version=release.version), 8000)
             return
         target = updater.install_target()
-        installable = bool(target and release.url and updater.can_replace(target))
+        # A Linux package's files belong to the package manager, so the new
+        # package goes to the system's installer instead.
+        packaged = bool(target and updater.package_kind(target))
+        installable = bool(target and release.url
+                           and (packaged or updater.can_replace(target)))
 
         text = t("update_available", new=release.version, current=__version__)
         if release.changes:
@@ -1223,10 +1227,14 @@ class MainWindow(QMainWindow):
         box.setIcon(QMessageBox.Information)
         box.setWindowTitle(t("update_title"))
         box.setText(text)
-        box.setInformativeText(
-            (t("update_ask", size=size) if size else t("update_ask_plain")) if installable
-            else t("update_ask_page"))
-        go = box.addButton(t("update_now") if installable else t("update_open_page"),
+        if not installable:
+            box.setInformativeText(t("update_ask_page"))
+        elif packaged:
+            box.setInformativeText(t("update_ask_package", size=size))
+        else:
+            box.setInformativeText(t("update_ask", size=size) if size else t("update_ask_plain"))
+        go = box.addButton(t("update_install_package") if installable and packaged
+                           else t("update_now") if installable else t("update_open_page"),
                            QMessageBox.AcceptRole)
         box.addButton(t("update_later"), QMessageBox.RejectRole)
         box.setDefaultButton(go)
@@ -1244,27 +1252,34 @@ class MainWindow(QMainWindow):
         dialog = QProgressDialog(t("update_downloading", version=release.version),
                                  t("cancel"), 0, 0, self)
         dialog.setWindowTitle(t("update_title"))
-        dialog.setWindowModality(Qt.WindowModal)
+        # Not modal: a modal one runs the event loop inside setValue(), so an
+        # update finishing then would land in the middle of a progress step.
+        # The window's own controls are off instead, until it's done.
+        dialog.setWindowModality(Qt.NonModal)
+        self._lock_for_update(True)
         dialog.setMinimumDuration(0)
         dialog.setAutoClose(False)
         dialog.setAutoReset(False)
-        stop = threading.Event()
-        dialog.canceled.connect(stop.set)
+        # Kept on the window: if the download thread let go of the last
+        # reference, PySide would drop the connection from that thread while
+        # this one emits it, and the two would wait on each other for ever.
+        self.update_stop = stop = threading.Event()
+        dialog.canceled.connect(self._cancel_update)
         self.update_dialog = dialog
         dialog.show()
         bridge = self.update_bridge
 
         def run():
             try:
-                updater.install(release, target,
-                                progress=lambda done, total: bridge.progress.emit(done, total),
-                                cancelled=stop.is_set)
+                package = updater.install(release, target,
+                                          progress=lambda done, total: bridge.progress.emit(done, total),
+                                          cancelled=stop.is_set)
             except updater.Cancelled:
                 bridge.cancelled.emit()
             except Exception as exc:  # noqa: BLE001 - shown to the person
                 bridge.install_failed.emit(str(exc))
             else:
-                bridge.installed.emit()
+                bridge.installed.emit(str(package or ""))
 
         threading.Thread(target=run, daemon=True).start()
 
@@ -1279,16 +1294,36 @@ class MainWindow(QMainWindow):
             label += f"\n{core.format_size(done)} / {core.format_size(total)}"
         dialog.setLabelText(label)
 
+    def _cancel_update(self):
+        self.update_stop.set()
+
+    def _lock_for_update(self, locked):
+        self.centralWidget().setEnabled(not locked)
+        self.menuBar().setEnabled(not locked)
+
     def _close_update_dialog(self):
         self.update_busy = False
+        self._lock_for_update(False)
         dialog, self.update_dialog = self.update_dialog, None
         if dialog is not None:
-            dialog.canceled.disconnect()
+            # Closing it says "cancelled" to a download that has already
+            # ended, which is harmless; disconnecting first could deadlock
+            # in PySide against the download thread as it finishes.
             dialog.close()
             dialog.deleteLater()
 
-    def _on_update_installed(self):
+    def _on_update_installed(self, package):
         self._close_update_dialog()
+        if package:
+            # The package manager replaces the program; this copy keeps running.
+            version = self.update_release.version
+            if updater.open_package(package):
+                QMessageBox.information(self, t("update_title"),
+                                        t("update_package_opened", version=version))
+            else:
+                QMessageBox.information(self, t("update_title"),
+                                        t("update_package_saved", version=version, path=package))
+            return
         try:
             updater.relaunch(self.update_target)
         except OSError:

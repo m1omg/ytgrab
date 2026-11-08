@@ -78,15 +78,18 @@ jobs:
           - os: ubuntu-24.04
             name: linux-x86_64
             artifact: DLPizer-linux-x86_64
+            installers: DLPizer-linux-x86_64.deb DLPizer-linux-x86_64.rpm
             qjs: linux-x86_64
             max-glibc: "2.39"
           - os: windows-latest
             name: windows-x86_64
             artifact: DLPizer-windows-x86_64.exe
+            installers: DLPizer-setup-windows-x86_64.exe
             qjs: windows-x86_64
           - os: macos-latest
             name: macos-arm64
             artifact: DLPizer-macos-arm64.zip
+            installers: DLPizer-macos-arm64.dmg
             python-arch: arm64
             # Qt 6.10+ needs macOS 15; 6.9.3 still supports macOS 12.
             pyside: PySide6-Essentials==6.9.3
@@ -98,6 +101,7 @@ jobs:
           - os: macos-latest
             name: macos-x86_64
             artifact: DLPizer-macos-x86_64.zip
+            installers: DLPizer-macos-x86_64.dmg
             python-arch: x64
             target-arch: x86_64
             pyside: PySide6-Essentials==6.9.3
@@ -199,6 +203,32 @@ jobs:
           QT_QPA_PLATFORM: offscreen
         run: .\dist\DLPizer.exe --selftest
 
+      # Installable packages beside the portable program: /opt/dlpizer with a
+      # menu entry, and the system libraries Qt needs as dependencies.
+      - name: Build the .deb and .rpm (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get install -y rpm
+          VERSION=$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' ytgrab/__init__.py)
+          PYTHON=python packaging/linux/build-packages.sh "$VERSION" dist/DLPizer .
+          dpkg-deb --info DLPizer-linux-x86_64.deb
+          rpm -qpi DLPizer-linux-x86_64.rpm
+
+      # A per-user installer: Start menu entry, uninstaller, no admin rights.
+      - name: Build the installer (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $iscc = Get-ChildItem "${env:ProgramFiles(x86)}\Inno Setup*\ISCC.exe", "$env:ProgramFiles\Inno Setup*\ISCC.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $iscc) {
+            choco install innosetup -y --no-progress
+            $iscc = Get-ChildItem "${env:ProgramFiles(x86)}\Inno Setup*\ISCC.exe", "$env:ProgramFiles\Inno Setup*\ISCC.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+          }
+          if (-not $iscc) { Write-Error "Inno Setup is not installed"; exit 1 }
+          $version = (Select-String -Path ytgrab/__init__.py -Pattern '__version__ = "(.*)"').Matches[0].Groups[1].Value
+          & $iscc.FullName /Qp "/DAppVersion=$version" packaging\windows\dlpizer.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Package (Linux)
         if: matrix.name == 'linux-x86_64'
         run: mv dist/DLPizer "${{ matrix.artifact }}"
@@ -268,10 +298,32 @@ jobs:
             ditto -c -k dist/DLPizer "${{ matrix.artifact }}"
           fi
 
+      # The disk image people install from: the app beside a link to
+      # Applications. hdiutil sometimes finds the volume busy, so it tries again.
+      - name: Disk image (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          mkdir dmg
+          ditto dist/DLPizer.app dmg/DLPizer.app
+          ln -s /Applications dmg/Applications
+          for attempt in 1 2 3; do
+            hdiutil create -volname DLPizer -srcfolder dmg -ov -format UDZO "${{ matrix.installers }}" && break
+            [ "$attempt" = 3 ] && exit 1
+            sleep 10
+          done
+
+      - name: Check every file is there
+        shell: bash
+        run: |
+          for f in ${{ matrix.artifact }} ${{ matrix.installers }}; do
+            [ -s "$f" ] || { echo "::error::$f was not built"; exit 1; }
+            ls -l "$f"
+          done
+
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact }}
-          path: ${{ matrix.artifact }}
+          name: ${{ matrix.name }}
+          path: DLPizer-*
           if-no-files-found: error
 
   android:

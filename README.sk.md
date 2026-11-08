@@ -18,22 +18,36 @@ a ďalšie aktualizácie sú opäť automatické.
 
 ## Stiahnutie
 
-Zostavenú aplikáciu nájdete na stránke [Releases](../../releases):
+Zostavenú aplikáciu nájdete na stránke [Releases](../../releases). Pre každý
+počítačový systém je tu inštalátor aj prenosná verzia, ktorá beží odkiaľkoľvek:
 
-| Systém | Súbor |
-| --- | --- |
-| Linux | `DLPizer-linux-x86_64` |
-| Windows | `DLPizer-windows-x86_64.exe` |
-| macOS (Apple Silicon) | `DLPizer-macos-arm64.zip` |
-| macOS (Intel) | `DLPizer-macos-x86_64.zip` |
-| Android (väčšina telefónov) | `DLPizer-android-arm64.apk` |
-| Android (staršie 32-bitové telefóny) | `DLPizer-android-arm32.apk` |
-| Android (neviete, Chromebooky) | `DLPizer-android-universal.apk` |
+| Systém | Inštalátor | Prenosná verzia |
+| --- | --- | --- |
+| Windows | `DLPizer-setup-windows-x86_64.exe` | `DLPizer-windows-x86_64.exe` |
+| macOS (Apple Silicon) | `DLPizer-macos-arm64.dmg` | `DLPizer-macos-arm64.zip` |
+| macOS (Intel) | `DLPizer-macos-x86_64.dmg` | `DLPizer-macos-x86_64.zip` |
+| Linux: Debian, Ubuntu, Mint, LMDE | `DLPizer-linux-x86_64.deb` | `DLPizer-linux-x86_64` |
+| Linux: Fedora, openSUSE | `DLPizer-linux-x86_64.rpm` | `DLPizer-linux-x86_64` |
+| Android (väčšina telefónov) | `DLPizer-android-arm64.apk` | |
+| Android (staršie 32-bitové telefóny) | `DLPizer-android-arm32.apk` | |
+| Android (neviete, Chromebooky) | `DLPizer-android-universal.apk` | |
 
-Na Linuxe súbor najprv označte ako spustiteľný: `chmod +x DLPizer-linux-x86_64`.
-Potrebuje glibc 2.39 alebo novšiu: Ubuntu 24.04, Debian 13, LMDE 7, Fedora 40,
-Linux Mint 22 a novšie, alebo priebežne aktualizovanú distribúciu ako Arch,
-CachyOS či openSUSE Tumbleweed (vašu verziu ukáže `ldd --version`).
+* **Inštalátor pre Windows:** nainštaluje aplikáciu len pre vás, takže
+  nepotrebuje práva správcu, a pridá DLPizer do ponuky Štart. Odinštalujete ho
+  v *Nastavenia → Aplikácie*.
+* **Obraz disku pre macOS:** otvorte ho a presuňte DLPizer do *Aplikácií*.
+* **Balíky pre Linux:** otvorte súbor v inštalátore softvéru alebo spustite
+  `sudo apt install ./DLPizer-linux-x86_64.deb` (Debian, Ubuntu, Mint, LMDE)
+  či `sudo dnf install ./DLPizer-linux-x86_64.rpm` (Fedora). DLPizer sa objaví
+  v ponuke aplikácií a potrebné knižnice sa doinštalujú. Na Archu, CachyOS
+  a iných distribúciách použite prenosnú verziu a
+  [`install-linux.sh`](#linux-položka-v-ponuke-aplikácií).
+* **Prenosná verzia pre Linux:** najprv ju označte ako spustiteľnú:
+  `chmod +x DLPizer-linux-x86_64`.
+
+Linux potrebuje glibc 2.39 alebo novšiu: Ubuntu 24.04, Debian 13, LMDE 7,
+Fedora 40, Linux Mint 22 a novšie, alebo priebežne aktualizovanú distribúciu
+ako Arch, CachyOS či openSUSE Tumbleweed (vašu verziu ukáže `ldd --version`).
 
 Na Androide otvorte stiahnutý súbor APK a keď sa systém spýta, povoľte
 prehliadaču alebo správcovi súborov inštalovať aplikácie. Novšie verzie sa
@@ -58,6 +72,11 @@ prebieha sťahovanie, počká, kým sa dokončí.
 aktualizácie* kontrolu pri spustení vypne. Ak sa aplikácia nemôže sama nahradiť,
 napríklad v priečinku, kam nemôže zapisovať, alebo na Macu spustená priamo zo
 stiahnutého súboru, ponúkne namiesto toho stránku s vydaním.
+
+Ak ste ju nainštalovali z balíka `.deb` alebo `.rpm`, program patrí správcovi
+balíkov, preto *Stiahnuť a nainštalovať* stiahne nový balík do priečinka
+Stiahnuté a otvorí ho v inštalátore softvéru, ktorý sa spýta na heslo; potom
+DLPizer spustite znova.
 
 Na Androide aktualizáciu ponúkne karta navrchu; APK pre váš telefón sa stiahne
 a overí rovnako a Android sa pred inštaláciou spýta (prvýkrát aj na to, či

@@ -24,6 +24,20 @@
   `YTGRAB_*` environment variables and the GitHub repository.
 - The release file names (`DLPizer-…`) are what `updater.asset_name()` and
   `Updates.kt` look for; change them only together with `build.yml`.
+- If the GitHub repository is renamed, GitHub redirects the old address, so
+  `REPO` in `updater.py` and `LATEST` in `Updates.kt` keep working; move them to
+  the new name in a later release.
+
+## Installers
+
+- Each desktop leg in `build.yml` publishes a portable build and an installer:
+  `packaging/windows/dlpizer.iss` (Inno Setup, per-user, so the app can still
+  replace itself), a `.dmg`, and `.deb`/`.rpm` from
+  `packaging/linux/build-packages.sh`, which also runs locally with dpkg-deb
+  and rpmbuild.
+- A `.deb`/`.rpm` install has `/opt/dlpizer/packaged` (`deb` or `rpm`); the
+  updater then fetches that package into Downloads and opens it with
+  `xdg-open`, since the files belong to the package manager.
 
 ## Conventions
 
